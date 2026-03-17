@@ -1,0 +1,169 @@
+---
+title: "Product catalog"
+description: "How the product catalog works: category filtering, sorting, price range, and the responsive grid layout."
+---
+
+The catalog page (`/catalogo`) fetches all products from `ProductContext` and passes them to `ProductGrid`, which owns all filter and sort state locally. The page itself is a thin shell — layout, loading state, and the animated hero header.
+
+## Architecture
+
+```
+Catalog (page)
+└── ProductGrid (owns filter/sort state)
+    └── ProductCard × n
+```
+
+`Catalog.jsx` reads `{ products, loading }` from `useProducts()`. While `loading` is `true`, a full-height `TruckLoader` with `size="large"` is shown. Once data arrives, the full `products` array is forwarded to `ProductGrid` as its only prop.
+
+## Filtering and sorting
+
+`ProductGrid` holds three pieces of state:
+
+| State | Default | Type |
+|---|---|---|
+| `selectedCategory` | `'Todos'` | string |
+| `sortBy` | `'featured'` | string |
+| `priceRange` | `[0, 100000]` | `[number, number]` |
+
+All three drive a single `useMemo` that produces `filteredProducts`:
+
+```jsx
+const filteredProducts = useMemo(() => {
+    let filtered = products;
+
+    // 1. Category filter
+    if (selectedCategory !== 'Todos') {
+        filtered = filtered.filter((p) => p.category === selectedCategory);
+    }
+
+    // 2. Price range filter (upper bound only — slider sets priceRange[1])
+    filtered = filtered.filter(
+        (p) => p.price >= priceRange[0] && p.price <= priceRange[1]
+    );
+
+    // 3. Sort
+    switch (sortBy) {
+        case 'price-asc':
+            filtered = [...filtered].sort((a, b) => a.price - b.price);
+            break;
+        case 'price-desc':
+            filtered = [...filtered].sort((a, b) => b.price - a.price);
+            break;
+        case 'name':
+            filtered = [...filtered].sort((a, b) => a.name.localeCompare(b.name));
+            break;
+        case 'featured':
+        default:
+            filtered = [...filtered].sort((a, b) => (b.featured ? 1 : 0) - (a.featured ? 1 : 0));
+            break;
+    }
+
+    return filtered;
+}, [products, selectedCategory, sortBy, priceRange]);
+```
+
+### Category buttons
+
+The available categories are derived at render time:
+
+```jsx
+const categories = useMemo(() => {
+    const cats = ['Todos', ...new Set(products.map((p) => p.category))];
+    return cats;
+}, [products]);
+```
+
+Each category renders as a toggle button. The active category gets `bg-primary-600 text-white` styling; inactive buttons use `bg-gray-100` / `dark:bg-slate-800`.
+
+### Sort options
+
+A `<select>` with four options maps to the `sortBy` values:
+
+| Option label | `sortBy` value |
+|---|---|
+| Destacados | `featured` |
+| Precio: Menor a Mayor | `price-asc` |
+| Precio: Mayor a Menor | `price-desc` |
+| Nombre A-Z | `name` |
+
+### Price range slider
+
+The slider sets only the upper bound of `priceRange`. The lower bound is always `0`.
+
+```jsx
+<input
+    type="range"
+    min="0"
+    max="100000"
+    step="5000"
+    value={priceRange[1]}
+    onChange={(e) => setPriceRange([0, parseInt(e.target.value)])}
+/>
+```
+
+The current range is displayed as formatted Colombian peso values above the slider.
+
+## Responsive grid
+
+The grid uses Tailwind's responsive column classes:
+
+```jsx
+<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+```
+
+| Breakpoint | Columns |
+|---|---|
+| Default (mobile) | 1 |
+| `sm` (≥640 px) | 2 |
+| `lg` (≥1024 px) | 3 |
+| `xl` (≥1280 px) | 4 |
+
+Each card is wrapped in a Framer Motion `<motion.div>` with a staggered entrance: `delay: index * 0.05`.
+
+## ProductCard
+
+`ProductCard` receives a single `product` prop and renders a card with hover interactions. Key behaviors:
+
+<Tabs>
+  <Tab title="Add to cart">
+    The card's cart button calls `addToCart(product, 1)` from `useCart()`. It prevents the `Link` navigation with `e.preventDefault()`. After adding, a `showAddedMessage` flag shows a green toast for 2 seconds.
+
+    The button turns green (`bg-green-500`) when `isInCart(product.id)` returns `true`.
+  </Tab>
+  <Tab title="Hover overlay">
+    On hover, a dark overlay (`bg-black/40`) fades in over the product image with two icon buttons: view details (`MdVisibility`) and add to favorites (`MdFavoriteBorder`). The image itself scales to 110% (`group-hover:scale-110`).
+
+    The card lifts 8 px via `whileHover={{ y: -8 }}`.
+  </Tab>
+  <Tab title="Stock badge">
+    When `product.stock < 10`, a red `¡Últimas unidades!` badge appears on the top-right of the image. The category name is always shown as a frosted badge on the top-left.
+  </Tab>
+</Tabs>
+
+### Product data shape
+
+`ProductCard` reads these fields from the `product` prop:
+
+| Field | Used for |
+|---|---|
+| `id` | Link to `/producto/:id`, cart identity check |
+| `name` | Card title, image alt |
+| `description` | Two-line truncated description |
+| `category` | Category badge |
+| `images[0]` | Main card image (falls back to `/placeholder.png`) |
+| `price` | Price display via `formatCurrency()` |
+| `width` | Spec row |
+| `stock` | Spec row + low-stock badge trigger |
+| `featured` | Used by `ProductGrid` sort |
+
+## Empty state
+
+When `filteredProducts.length === 0`, `ProductGrid` renders a centered message instead of the grid:
+
+```jsx
+<p className="text-xl text-gray-500 dark:text-gray-400">
+    No se encontraron productos con los filtros seleccionados
+</p>
+```
+
+A results count (`Mostrando N productos`) is always shown above the grid area.

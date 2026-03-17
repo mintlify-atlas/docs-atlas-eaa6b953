@@ -1,0 +1,157 @@
+---
+title: Installation
+description: Install all frontend and backend dependencies, compile the Java backend, and verify your setup before starting D&D Textil for the first time.
+---
+
+## Prerequisites
+
+Before installing, make sure you have the following tools available.
+
+| Tool | Minimum version | Notes |
+|---|---|---|
+| Node.js | 18.x | Required for Vite and npm |
+| npm | 9.x | Bundled with Node.js |
+| Java JDK | 11 | Required to compile and run the backend |
+| PostgreSQL | 13 | Database server must be running before starting the backend |
+
+<Tip>
+  Check your versions with `node -v`, `java -version`, and `psql --version`.
+</Tip>
+
+## Install frontend dependencies
+
+All frontend packages are declared in `package.json`. Install them with your preferred package manager.
+
+<CodeGroup>
+
+```bash npm
+npm install
+```
+
+```bash yarn
+yarn install
+```
+
+```bash pnpm
+pnpm install
+```
+
+</CodeGroup>
+
+This installs the following packages:
+
+### Runtime dependencies
+
+| Package | Version | Purpose |
+|---|---|---|
+| `react` | 18.3.1 | UI framework |
+| `react-dom` | 18.3.1 | DOM renderer |
+| `react-router-dom` | 6.22.0 | Client-side routing |
+| `framer-motion` | 11.0.5 | Animations and transitions |
+| `react-hook-form` | 7.71.1 | Form state management |
+| `@hookform/resolvers` | 5.2.2 | Schema validation adapters |
+| `zod` | 4.3.6 | Form schema validation |
+| `recharts` | 3.7.0 | Data visualization charts |
+| `react-icons` | 5.0.1 | SVG icon library |
+
+### Dev dependencies
+
+| Package | Version | Purpose |
+|---|---|---|
+| `vite` | 5.4.11 | Build tool and dev server |
+| `@vitejs/plugin-react` | 4.3.4 | Vite plugin for React fast refresh |
+| `tailwindcss` | 3.4.1 | Utility-first CSS framework |
+| `postcss` | 8.4.35 | CSS transformation pipeline |
+| `autoprefixer` | 10.4.17 | Vendor prefix injection |
+| `@types/react` | 18.3.12 | TypeScript types for React |
+| `@types/react-dom` | 18.3.1 | TypeScript types for React DOM |
+
+## Verify the frontend install
+
+After installing, confirm the dev server starts correctly:
+
+```bash
+npm run dev
+```
+
+Vite should print a local URL. By default it uses port 3001 (see [Environment configuration](/setup/environment) for details). You can stop the server with `Ctrl+C`.
+
+## Set up the Java backend
+
+The Java backend lives in `backend-java/conexionPostgres/`. It does not use Maven or Gradle — it relies on two JAR files already present in the `lib/` directory.
+
+```
+backend-java/conexionPostgres/
+├── src/          # Java source files
+├── bin/          # Compiled .class files (output)
+└── lib/
+    ├── gson-2.10.1.jar           # JSON serialization
+    └── postgresql-42.7.3.jar     # PostgreSQL JDBC driver
+```
+
+### Compile the source files
+
+If the `bin/` directory already contains compiled classes from the repository, you can skip this step. To recompile from scratch:
+
+<CodeGroup>
+
+```bash Windows
+javac -cp "lib/gson-2.10.1.jar;lib/postgresql-42.7.3.jar" -d bin src/*.java src/**/*.java
+```
+
+```bash macOS / Linux
+javac -cp "lib/gson-2.10.1.jar:lib/postgresql-42.7.3.jar" -d bin src/*.java src/**/*.java
+```
+
+</CodeGroup>
+
+<Note>
+  Run the compile command from the `backend-java/conexionPostgres/` directory so that relative paths to `lib/` and `bin/` resolve correctly.
+</Note>
+
+### Start the backend
+
+Once compiled (and once PostgreSQL is running), start the API server:
+
+<CodeGroup>
+
+```bash Windows
+java -cp "bin;lib/gson-2.10.1.jar;lib/postgresql-42.7.3.jar" App
+```
+
+```bash macOS / Linux
+java -cp "bin:lib/gson-2.10.1.jar:lib/postgresql-42.7.3.jar" App
+```
+
+</CodeGroup>
+
+A successful start prints:
+
+```
+Iniciando aplicación Backend...
+✅ Conexión a PostgreSQL establecida con éxito.
+🚀 Servidor API escuchando en el puerto 8081
+```
+
+<Warning>
+  If the connection fails, the server will not start. Verify that PostgreSQL is running and that the database `tienda_digital_textiles_db` exists. See [Database setup](/setup/database).
+</Warning>
+
+## Available npm scripts
+
+| Script | Command | Description |
+|---|---|---|
+| Dev server | `npm run dev` | Starts Vite on port 3001 with hot reload |
+| Production build | `npm run build` | Outputs optimized assets to `dist/` |
+| Preview build | `npm run preview` | Serves the production build locally |
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Database setup" icon="database" href="/setup/database">
+    Import the PostgreSQL schema and configure the connection.
+  </Card>
+  <Card title="Environment configuration" icon="sliders" href="/setup/environment">
+    Configure ports, proxy, Tailwind dark mode, and colors.
+  </Card>
+</CardGroup>

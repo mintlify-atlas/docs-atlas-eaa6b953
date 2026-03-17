@@ -1,0 +1,243 @@
+---
+title: 'Project structure'
+description: 'Complete directory reference for the D&D Textil codebase — frontend, backend, and database.'
+---
+
+D&D Textil is a monorepo containing a React 18 frontend (`src/`), a Java HTTP backend (`backend-java/`), and a PostgreSQL database dump (`BASE DE DATOS/`).
+
+## Full directory tree
+
+```
+tienda digital de telas/
+├── src/
+│   ├── components/          # Reusable UI components
+│   ├── pages/               # Route-level page components
+│   │   ├── admin/           # Admin dashboard pages
+│   │   ├── client/          # Client dashboard pages
+│   │   ├── seller/          # Seller dashboard pages
+│   │   └── payment/         # Payment flow pages
+│   ├── context/             # React Context providers
+│   ├── hooks/               # Custom React hooks
+│   ├── utils/               # Utility functions
+│   ├── data/                # Static JSON data and mock data
+│   ├── App.jsx              # Root component — all routes live here
+│   ├── main.jsx             # Vite entry point
+│   └── index.css            # Global styles (Tailwind base)
+├── backend-java/
+│   └── conexionPostgres/
+│       ├── src/
+│       │   ├── App.java             # Entry point — starts the HTTP server
+│       │   ├── api/                 # HTTP request handlers (ApiServer, AuthHandler, …)
+│       │   ├── conexion/            # PostgreSQL connection singleton
+│       │   ├── dao/                 # Data access objects
+│       │   └── models/              # Plain Java model classes
+│       ├── lib/
+│       │   ├── gson-2.10.1.jar      # JSON serialization
+│       │   └── postgresql-42.7.3.jar # JDBC driver
+│       └── bin/                     # Compiled .class files
+├── public/                  # Vite static assets
+├── BASE DE DATOS/
+│   └── TIENDA DIGITAL TEXTIL.sql   # PostgreSQL custom-format dump
+├── package.json
+├── vite.config.js
+└── tailwind.config.js
+```
+
+## Frontend — `src/`
+
+### `components/`
+
+Reusable UI pieces shared across multiple pages.
+
+| File | Purpose |
+|---|---|
+| `AppProviders.jsx` | Nests all Context providers in the correct order |
+| `ProtectedRoute.jsx` | Guards routes by authentication status and role |
+| `Header.jsx` / `Footer.jsx` | Global site chrome |
+| `Hero.jsx` | Full-width hero section on the home page |
+| `Carousel.jsx` | Promotional image carousel |
+| `ProductCard.jsx` / `ProductGrid.jsx` | Product display in catalog |
+| `ImageGallery.jsx` | Product detail image viewer with zoom |
+| `QuantitySelector.jsx` | Numeric input for adding items to cart |
+| `CartItem.jsx` / `CartSummary.jsx` | Cart line items and totals |
+| `CheckoutForm.jsx` / `OrderSummary.jsx` | Checkout form and order summary |
+| `FeaturedProducts.jsx` / `Benefits.jsx` | Home page sections |
+| `AnimatedPage.jsx` | Framer Motion page wrapper |
+| `Toast.jsx` | Notification toast rendered by `NotificationContext` |
+| `TruckLoader.jsx` / `Counter.jsx` | Animated UI widgets |
+| `ScrollToTop.jsx` | Scrolls to top on route change |
+| `layouts/` | Shared layout shells (dashboard layouts) |
+| `dashboard/` | Sidebar, stats cards, and dashboard-specific widgets |
+| `client/` | Client dashboard sub-components |
+
+### `pages/`
+
+Each file maps directly to a route defined in `App.jsx`.
+
+<AccordionGroup>
+  <Accordion title="Public pages">
+    | File | Route |
+    |---|---|
+    | `Home.jsx` | `/` |
+    | `Catalog.jsx` | `/catalogo` |
+    | `ProductDetail.jsx` | `/producto/:id` |
+    | `Cart.jsx` | `/carrito` |
+    | `About.jsx` | `/nosotros` |
+    | `Contact.jsx` | `/contacto` |
+    | `Login.jsx` | `/login` |
+    | `Register.jsx` | `/registro` |
+    | `BugReport.jsx` | `/reportar-fallo` |
+    | `OrderConfirmation.jsx` | `/confirmacion` |
+    | `Checkout.jsx` | `/checkout` |
+  </Accordion>
+  <Accordion title="payment/">
+    | File | Route |
+    |---|---|
+    | `payment/Payment.jsx` | `/pago` |
+  </Accordion>
+  <Accordion title="client/">
+    | File | Route |
+    |---|---|
+    | `ClientDashboard.jsx` | `/cliente` |
+    | `Profile.jsx` | `/perfil` |
+    | `OrderHistory.jsx` | `/mis-pedidos` |
+    | `Orders/OrderHistory.jsx` | `/cliente/pedidos` |
+    | `Orders/OrderTracking.jsx` | `/cliente/pedidos/rastreo` |
+    | `Collection/Wishlist.jsx` | `/cliente/coleccion` |
+    | `Collection/ProjectCalculator.jsx` | `/cliente/coleccion/calculadora` |
+    | `Support/NewReport.jsx` | `/cliente/soporte/nuevo` |
+    | `Support/MyTickets.jsx` | `/cliente/soporte/tickets` |
+    | `Settings/Profile.jsx` | `/cliente/configuracion` |
+    | `Settings/AddressBook.jsx` | `/cliente/configuracion/direcciones` |
+  </Accordion>
+  <Accordion title="seller/">
+    | File | Route |
+    |---|---|
+    | `SellerDashboard.jsx` | `/vendedor` and `/vendedor/productos` |
+    | `SellerOrders.jsx` | `/vendedor/pedidos` |
+    | `StockAlerts.jsx` | `/vendedor/stock` |
+  </Accordion>
+  <Accordion title="admin/">
+    | File | Route |
+    |---|---|
+    | `AdminOverview.jsx` | `/admin` |
+    | `UserManagement.jsx` | `/admin/usuarios` |
+    | `SellerMetrics.jsx` | `/admin/vendedores` |
+    | `ClientMetrics.jsx` | `/admin/clientes` |
+    | `AdminProducts.jsx` | `/admin/productos` |
+    | `ManageCarousel.jsx` | `/admin/carrusel` |
+    | `ManageHome.jsx` | `/admin/home` |
+    | `AdminBugReports.jsx` | `/admin/reportes` |
+    | `SystemConfig.jsx` | `/admin/configuracion` |
+    | `Inventory/BatchControl.jsx` | `/admin/inventario/lotes` |
+    | `Inventory/WasteCalculator.jsx` | `/admin/inventario/merma` |
+    | `Inventory/StockSettings.jsx` | `/admin/inventario/alertas` |
+    | `Inventory/MovementHistory.jsx` | `/admin/inventario/historial` |
+    | `Vetting/ApprovalQueue.jsx` | `/admin/moderacion/aprobacion` |
+    | `Vetting/VendorPerformance.jsx` | `/admin/moderacion/vendedores` |
+    | `Analytics/SalesHeatMap.jsx` | `/admin/analytics/mapa-ventas` |
+    | `Analytics/RotationRanking.jsx` | `/admin/analytics/rotacion` |
+    | `Analytics/ReturnsAnalysis.jsx` | `/admin/analytics/devoluciones` |
+    | `Analytics/RevenueProjection.jsx` | `/admin/analytics/proyeccion` |
+    | `Support/TicketManagement.jsx` | `/admin/soporte/tickets` |
+    | `Support/CouponCreation.jsx` | `/admin/soporte/cupones` |
+  </Accordion>
+</AccordionGroup>
+
+### `context/`
+
+Six React Context providers manage all global state. They are composed inside `AppProviders.jsx`. See the [State management reference](/reference/state-management) for full API details.
+
+| File | Hook | Purpose |
+|---|---|---|
+| `NotificationContext.jsx` | `useNotification` | Toast notifications |
+| `AuthContext.jsx` | `useAuth` | Authentication and roles |
+| `MetricsContext.jsx` | `useMetrics` | Admin data, orders, products, coupons |
+| `CartContext.jsx` | `useCart` | Shopping cart |
+| `ProductContext.jsx` | `useProducts` | Public product catalog |
+| `UIContext.jsx` | `useUI` | Carousel slides, home section visibility |
+
+### `hooks/`
+
+| File | Purpose |
+|---|---|
+| `useLocalStorage.js` | `useState`-compatible hook that syncs to `localStorage` |
+| `useDarkMode.js` | Persists dark mode preference and toggles the `dark` class on `<html>` |
+
+### `utils/`
+
+| File | Purpose |
+|---|---|
+| `formatters.js` | Number and currency formatting helpers |
+
+### `data/`
+
+| File | Purpose |
+|---|---|
+| `products.json` | Static product catalogue used as fallback when the backend is unreachable |
+| `mockData.js` | Mock users, orders, sales data, bug reports, inventory batches, coupons, support tickets, and regional sales — used as initial state in `MetricsContext` |
+
+## Backend — `backend-java/conexionPostgres/`
+
+A plain Java HTTP server using `com.sun.net.httpserver.HttpServer`. No framework dependency — only Gson for JSON and the PostgreSQL JDBC driver.
+
+| Package / file | Purpose |
+|---|---|
+| `App.java` | Entry point: validates DB connection, starts API on port `8081` |
+| `conexion/Conexion.java` | Singleton `Connection` with automatic reconnection logic |
+| `api/ApiServer.java` | Registers all HTTP contexts and contains inline `HttpHandler` classes for products and static files |
+| `api/AuthHandler.java` | Handles `POST /api/login` and `POST /api/register` |
+| `api/UsersHandler.java` | Handles `GET /api/users` |
+| `api/OrdersHandler.java` | Handles `GET /api/orders` and `PUT /api/orders/:id/status` |
+| `api/CouponsHandler.java` | Handles CRUD on `/api/coupons` |
+| `api/ConfigHandler.java` | Key–value config store on `/api/config` |
+| `api/SupportHandler.java` | Handles `/api/support/tickets` and `/api/support/bugs` |
+| `dao/` | One DAO class per entity with direct JDBC queries |
+| `models/` | Plain Java beans: `User`, `Product`, `Order`, `Coupon`, `SupportTicket`, `BugReport`, `ConfigItem` |
+
+## Key dependencies
+
+<CardGroup cols={2}>
+  <Card title="React 18" icon="react">
+    UI framework. Strict mode enabled via `main.jsx`.
+  </Card>
+  <Card title="Vite 5" icon="bolt">
+    Build tool and dev server. Default port `3001` (CORS origin in Java backend).
+  </Card>
+  <Card title="Tailwind CSS 3" icon="palette">
+    Utility-first styling. Dark mode via `class` strategy.
+  </Card>
+  <Card title="React Router v6" icon="map">
+    Client-side routing with `BrowserRouter`. All routes defined in `App.jsx`.
+  </Card>
+  <Card title="Framer Motion 11" icon="play">
+    Page transition animations via `AnimatePresence` in `App.jsx`.
+  </Card>
+  <Card title="React Hook Form + Zod" icon="check">
+    Form management and schema validation used in checkout, login, and registration forms.
+  </Card>
+  <Card title="Recharts 3" icon="chart-bar">
+    Charts and graphs in the admin analytics pages.
+  </Card>
+  <Card title="Gson 2.10.1 (Java)" icon="braces">
+    JSON serialization/deserialization in the Java backend.
+  </Card>
+</CardGroup>
+
+## Starting the project
+
+```bash
+# 1. Install frontend dependencies
+npm install
+
+# 2. Start the Java backend (must run first)
+cd backend-java/conexionPostgres
+java -cp "bin;lib/gson-2.10.1.jar;lib/postgresql-42.7.3.jar" App
+
+# 3. Start the React dev server (new terminal)
+npm run dev
+```
+
+<Note>
+  The frontend falls back to `src/data/products.json` and mock data from `src/data/mockData.js` when the backend is unavailable. The app remains functional without the Java server for UI development.
+</Note>

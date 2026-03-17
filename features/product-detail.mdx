@@ -1,0 +1,135 @@
+---
+title: "Product detail"
+description: "Product detail page: image gallery with zoom, technical specifications, quantity selector, add-to-cart flow, and related products."
+---
+
+The product detail page lives at `/producto/:id`. It resolves the product with `getProductById(id)` from `useProducts()`, then renders the gallery, specifications, quantity selector, and action buttons in a two-column layout.
+
+## Routing and loading states
+
+```jsx
+const { id } = useParams();
+const { getProductById, loading, products } = useProducts();
+```
+
+- While `loading` is `true`, a centered spinner is shown.
+- If `getProductById(id)` returns nothing (invalid ID), a "Producto no encontrado" message is shown with a link back to `/catalogo`.
+- A breadcrumb trail (`Inicio / Catálogo / {product.name}`) is rendered at the top of the page.
+
+## Image gallery
+
+`ImageGallery` receives `images` (the product's image array) and `productName`. It manages two state variables:
+
+| State | Default | Purpose |
+|---|---|---|
+| `selectedImage` | `0` | Index of the currently displayed large image |
+| `isZoomed` | `false` | Toggles 1.5× scale on the main image |
+
+### Main image and zoom
+
+Clicking the main image toggles `isZoomed`. The image animates to `scale: 1.5` via Framer Motion. When zoomed, a "Click para alejar" label appears in the top-right corner.
+
+```jsx
+<motion.img
+    key={selectedImage}
+    src={images[selectedImage] || '/placeholder.png'}
+    alt={`${productName} - Vista ${selectedImage + 1}`}
+    animate={{ opacity: 1, scale: isZoomed ? 1.5 : 1 }}
+    transition={{ duration: 0.3 }}
+    className="w-full h-full object-cover"
+/>
+```
+
+`AnimatePresence mode="wait"` handles the cross-fade when switching between images.
+
+### Thumbnails
+
+Thumbnails are rendered in a 4-column grid. Clicking a thumbnail sets `selectedImage` to that index and resets `isZoomed` to `false`. The active thumbnail gets a `border-primary-600 shadow-lg` ring.
+
+If `images` is empty, a single placeholder thumbnail is shown.
+
+## Technical specifications
+
+Specifications are shown in a 2×2 grid inside a card:
+
+| Field | Label |
+|---|---|
+| `product.material` | Material |
+| `product.width` | Ancho |
+| `product.weight` | Peso |
+| `product.stock` | Stock (displayed as "N metros") |
+
+Care instructions (`product.care`) appear in a separate blue info block below the spec grid.
+
+## Quantity selector
+
+`QuantitySelector` is used with these props:
+
+```jsx
+<QuantitySelector
+    quantity={quantity}
+    setQuantity={setQuantity}
+    max={product.stock}
+/>
+```
+
+The `min` prop defaults to `1`. The component renders a decrement button, a number input, and an increment button. Validation runs on both button clicks and direct input:
+
+<Tabs>
+  <Tab title="Button presses">
+    - Decrement: disabled when `quantity <= min`. Does nothing if already at the minimum.
+    - Increment: disabled when `quantity >= max`. Does nothing if already at the maximum.
+
+    Both buttons use `whileTap={{ scale: 0.9 }}` for haptic-style feedback.
+  </Tab>
+  <Tab title="Direct input">
+    The input accepts typed numbers. `handleInputChange` parses the value with `parseInt` and only calls `setQuantity` if the result is a valid number within `[min, max]`. An empty input resets to `min`.
+
+    ```jsx
+    const handleInputChange = (e) => {
+        const value = parseInt(e.target.value);
+        if (!isNaN(value) && value >= min && value <= max) {
+            setQuantity(value);
+        } else if (e.target.value === '') {
+            setQuantity(min);
+        }
+    };
+    ```
+  </Tab>
+</Tabs>
+
+A label below the selector always shows `metros (máx: {max})`.
+
+## Add-to-cart flow
+
+Two primary action buttons are available:
+
+<Steps>
+  <Step title="Agregar al Carrito">
+    Calls `addToCart(product, quantity)`. Sets `showSuccess` to `true` for 3 seconds, showing a green confirmation banner at the bottom of the info column. The user stays on the product detail page.
+  </Step>
+  <Step title="Comprar Ahora">
+    Calls `addToCart(product, quantity)`, then immediately navigates to `/carrito`.
+
+    ```jsx
+    const handleBuyNow = () => {
+        addToCart(product, quantity);
+        navigate('/carrito');
+    };
+    ```
+  </Step>
+</Steps>
+
+Two secondary buttons (Favoritos and Compartir) are rendered below the primary actions but are not yet wired to business logic.
+
+## Related products
+
+The related products section filters the full product list by the same category, excludes the current product, and takes up to 4 results:
+
+```jsx
+const relatedProducts = products
+    .filter((p) => p.category === product.category && p.id !== product.id)
+    .slice(0, 4);
+```
+
+They are rendered as a row of `ProductCard` components in a `grid-cols-1 sm:grid-cols-2 lg:grid-cols-4` grid. The section only renders when `relatedProducts.length > 0`.

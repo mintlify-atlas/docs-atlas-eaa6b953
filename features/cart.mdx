@@ -1,0 +1,141 @@
+---
+title: "Shopping cart"
+description: "Cart page and CartContext API: adding and removing items, quantity updates, automatic total calculation with IVA and shipping, coupon codes, and localStorage persistence."
+---
+
+The cart page (`/carrito`) is built on top of `CartContext`, which persists state to `localStorage` through the `useLocalStorage` hook. The page itself handles the order summary calculations and coupon application; it delegates item rendering to inline `CartRow` components.
+
+## CartContext API
+
+`CartContext` is provided by `CartProvider`. Consume it with the `useCart()` hook anywhere inside the provider tree.
+
+<Warning>
+  Calling `useCart()` outside of `CartProvider` throws: `useCart debe usarse dentro de un CartProvider`.
+</Warning>
+
+### State
+
+| Value | Type | Persisted | Description |
+|---|---|---|---|
+| `cartItems` | `array` | Yes (`cart` key) | Array of product objects with a `quantity` field |
+| `appliedCoupon` | `object \| null` | Yes (`applied_coupon` key) | Currently active coupon or `null` |
+
+### Methods
+
+```jsx
+import { useCart } from '../context/CartContext';
+
+const {
+    cartItems,
+    appliedCoupon,
+    setAppliedCoupon,
+    addToCart,
+    updateQuantity,
+    removeFromCart,
+    clearCart,
+    getCartTotal,
+    getCartItemCount,
+    isInCart,
+    getProductQuantity,
+} = useCart();
+```
+
+<AccordionGroup>
+  <Accordion title="addToCart(product, quantity)">
+    Merges the product into `cartItems`. If a product with the same `id` already exists, its quantity is incremented by `quantity`. Otherwise the product is spread into a new item object with the `quantity` field appended.
+
+    ```jsx
+    // quantity defaults to 1
+    addToCart(product, 1);
+    ```
+  </Accordion>
+  <Accordion title="updateQuantity(productId, newQuantity)">
+    Sets the item's quantity to `newQuantity`. If `newQuantity <= 0`, the item is removed via `removeFromCart` instead.
+  </Accordion>
+  <Accordion title="removeFromCart(productId)">
+    Filters out the item with the matching `id` from `cartItems`.
+  </Accordion>
+  <Accordion title="clearCart()">
+    Empties `cartItems` and resets `appliedCoupon` to `null`. Called automatically after a successful payment.
+  </Accordion>
+  <Accordion title="getCartTotal()">
+    Returns the sum of `price × quantity` for all items — the subtotal before discount, shipping, and tax.
+
+    ```jsx
+    return cartItems.reduce((total, item) => total + item.price * item.quantity, 0);
+    ```
+  </Accordion>
+  <Accordion title="getCartItemCount()">
+    Returns the total number of meters across all items (sum of all `quantity` values).
+  </Accordion>
+  <Accordion title="isInCart(productId)">
+    Returns `true` if any item in `cartItems` has the given `id`.
+  </Accordion>
+  <Accordion title="getProductQuantity(productId)">
+    Returns the quantity of a specific product, or `0` if it is not in the cart.
+  </Accordion>
+</AccordionGroup>
+
+### localStorage persistence
+
+Both `cartItems` and `appliedCoupon` are stored via the `useLocalStorage` hook, keyed to `'cart'` and `'applied_coupon'` respectively. State survives page reloads and browser restarts until the user clears site data or `clearCart()` is called.
+
+## Order summary calculations
+
+All financial calculations happen in `Cart.jsx` (and are mirrored in `OrderSummary.jsx` and `Checkout.jsx`):
+
+```jsx
+const subtotal = getCartTotal();
+
+// Coupon discount
+let discount = 0;
+if (appliedCoupon) {
+    discount = appliedCoupon.discountType === 'percentage'
+        ? subtotal * (appliedCoupon.discountValue / 100)
+        : appliedCoupon.discountValue;
+    discount = Math.min(discount, subtotal); // cannot exceed subtotal
+}
+
+const afterDiscount = subtotal - discount;
+const shipping = afterDiscount >= 100000 ? 0 : 15000; // free above COP 100,000
+const tax = afterDiscount * 0.19;                      // 19% IVA
+const total = afterDiscount + shipping + tax;
+```
+
+<Note>
+  Shipping is calculated on `afterDiscount` (post-coupon subtotal), not on the original subtotal. The free shipping threshold is COP 100,000.
+</Note>
+
+## Coupon codes
+
+Coupons are fetched from `MetricsContext` (`useMetrics().coupons`). The `applyCoupon` function in `Cart.jsx` validates a submitted code against that list:
+
+1. Trims and uppercases the input.
+2. Finds a coupon where `c.code === code && c.active`.
+3. Checks that `new Date(found.expiresAt)` is in the future.
+4. If the coupon has `rules.minPurchase`, checks that `subtotal >= rules.minPurchase`.
+5. On success, calls `setAppliedCoupon(found)` and clears the input field.
+
+Error messages are shown inline below the input field. An applied coupon can be removed by clicking the `×` icon next to the coupon badge.
+
+## CartRow component
+
+`CartRow` is defined inline in `Cart.jsx`. It receives `item`, `onRemove`, and `onQuantity` as props.
+
+- The `-` button is disabled when `item.quantity <= 1`.
+- The `+` button is disabled when `item.quantity >= item.stock` (falls back to `99` if `stock` is undefined).
+- The delete button calls `onRemove(item.id)`.
+- Line total is computed inline: `item.price * item.quantity`.
+- If `item.images[0]` is falsy, a `MdImageNotSupported` icon placeholder is shown instead.
+
+## Empty cart state
+
+When `cartItems.length === 0`, the page replaces the full cart layout with a centered empty state containing a `MdShoppingBag` icon and a link back to `/catalogo`.
+
+## Trust badges
+
+The order summary panel displays three trust indicators beneath the checkout button:
+
+- `MdSecurity` — Pago 100% seguro  
+- `MdLocalShipping` — Envío gratis desde $100.000  
+- `MdAutorenew` — Devoluciones fáciles

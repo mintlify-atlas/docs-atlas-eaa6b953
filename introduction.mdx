@@ -1,0 +1,110 @@
+---
+title: Introduction
+description: An overview of D&D Textil, a full-stack digital textile store with role-based dashboards, a Java REST backend, and a PostgreSQL database.
+---
+
+**D&D Textil** is a SaaS-style e-commerce application for selling fabrics and textiles online. It combines a React 18 frontend with a custom Java HTTP server that connects to a PostgreSQL database. The project was developed as part of the SENA ADSO (Análisis y Desarrollo de Software) program.
+
+<Info>
+  This is a development-stage application. The checkout flow is simulated — no real payment processor is connected.
+</Info>
+
+## Tech stack
+
+| Layer | Technology | Version |
+|---|---|---|
+| Frontend framework | React | 18.3.1 |
+| Build tool | Vite | 5.4.11 |
+| Styling | Tailwind CSS | 3.4.1 |
+| Animation | Framer Motion | 11.0.5 |
+| Routing | React Router DOM | 6.22.0 |
+| Forms | React Hook Form + Zod | 7.71.1 / 4.3.6 |
+| Charts | Recharts | 3.7.0 |
+| Icons | React Icons | 5.0.1 |
+| Backend | Java (JDK) with `com.sun.net.httpserver` | — |
+| Database driver | PostgreSQL JDBC | 42.7.3 |
+| JSON serialization | Gson | 2.10.1 |
+| Database | PostgreSQL | 5432 (default) |
+
+## Architecture overview
+
+The application is split into two independently running processes:
+
+```
+┌─────────────────────────────┐       HTTP / JSON        ┌──────────────────────────────┐
+│   React Frontend (Vite)     │  ──────────────────────▶  │  Java Backend (ApiServer)    │
+│   localhost:3001            │  ◀──────────────────────  │  localhost:8081              │
+│                             │                           │                              │
+│  React Router v6            │       /uploads proxy      │  PostgreSQL JDBC connection  │
+│  Context API (cart, auth)   │  ──────────────────────▶  │  Gson serialization          │
+│  Tailwind CSS + dark mode   │                           │  SHA-256 password hashing    │
+└─────────────────────────────┘                           └──────────────┬───────────────┘
+                                                                         │
+                                                                         ▼
+                                                          ┌──────────────────────────────┐
+                                                          │  PostgreSQL                  │
+                                                          │  tienda_digital_textiles_db  │
+                                                          │  localhost:5432              │
+                                                          └──────────────────────────────┘
+```
+
+Vite proxies requests to `/uploads` from port 3001 to the Java server on port 8081. All other API calls go directly from the browser to `http://localhost:8081`.
+
+## User roles
+
+D&D Textil has three user roles. Each role is stored in the `users` table and determines which dashboard and routes are accessible after login.
+
+<CardGroup cols={3}>
+  <Card title="Client" icon="user">
+    Browse the catalog, add items to the cart, go through checkout, view order history, manage a wishlist, use the fabric calculator, and open support tickets.
+  </Card>
+  <Card title="Seller" icon="shop">
+    List and manage products (subject to admin moderation), view incoming orders, and monitor stock levels and alerts.
+  </Card>
+  <Card title="Admin" icon="shield">
+    Full access: manage all users, approve or reject seller products, configure the store, view analytics and revenue charts, and respond to support tickets.
+  </Card>
+</CardGroup>
+
+## Project structure
+
+```
+tienda digital de telas/
+├── backend-java/
+│   └── conexionPostgres/
+│       ├── src/
+│       │   ├── App.java            # Entry point — connects DB and starts ApiServer
+│       │   ├── api/                # HTTP handlers (products, users, orders, auth …)
+│       │   ├── conexion/           # Singleton PostgreSQL connection (Conexion.java)
+│       │   ├── dao/                # Data access objects
+│       │   └── models/             # POJOs (User, Product, Order, Coupon …)
+│       ├── lib/
+│       │   ├── gson-2.10.1.jar
+│       │   └── postgresql-42.7.3.jar
+│       └── bin/                    # Compiled .class files
+├── src/
+│   ├── components/                 # Reusable UI components
+│   ├── pages/                      # Route-level page components
+│   ├── context/                    # Cart and auth context providers
+│   ├── hooks/                      # useDarkMode, useLocalStorage
+│   ├── utils/                      # formatters.js
+│   └── data/                       # products.json (mock data)
+├── vite.config.js
+├── tailwind.config.js
+└── package.json
+```
+
+## Routes
+
+| Path | Page |
+|---|---|
+| `/` | Home — hero, carousel, featured products |
+| `/catalogo` | Product catalog with filters and sorting |
+| `/producto/:id` | Product detail with image gallery |
+| `/carrito` | Shopping cart |
+| `/checkout` | Checkout form and order summary |
+| `/confirmacion` | Order confirmation |
+
+<Tip>
+  Ready to run the project? See the [Quickstart](/quickstart) to go from zero to a running store in minutes.
+</Tip>

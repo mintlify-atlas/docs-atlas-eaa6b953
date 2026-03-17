@@ -1,0 +1,144 @@
+---
+title: Seller dashboard
+description: Product management, order fulfillment, and stock alerts for seller and admin users.
+---
+
+The seller dashboard gives sellers full control over their own product inventory, order pipeline, and stock health. Admin users have access to all seller routes as well.
+
+## Access control
+
+All seller routes use `<ProtectedRoute roles={['seller', 'admin']}>`. This means both the `seller` and `admin` roles can access the seller dashboard.
+
+```jsx App.jsx
+<Route
+  path="/vendedor/productos"
+  element={
+    <ProtectedRoute roles={['seller', 'admin']}>
+      <SellerProducts />
+    </ProtectedRoute>
+  }
+/>
+```
+
+## Routes reference
+
+| Path | Component | Description |
+|---|---|---|
+| `/vendedor` | `SellerDashboard` | Alias for `/vendedor/productos` |
+| `/vendedor/productos` | `SellerDashboard` | Product management + metrics overview |
+| `/vendedor/pedidos` | `SellerOrders` | Order management |
+| `/vendedor/stock` | `StockAlerts` | Stock level alerts and quality reports |
+
+## Product management — `/vendedor/productos`
+
+`SellerDashboard.jsx` is both the main dashboard and the product management interface.
+
+### Metrics overview
+
+The top of the page shows four metric cards scoped to the current seller's data (fetched via `getProductsBySeller(sellerId)` and `getOrdersBySeller(sellerId)` from `MetricsContext`):
+
+<CardGroup cols={4}>
+  <Card title="Mis Ventas Totales" icon="dollar-sign">
+    Total revenue from completed orders attributed to this seller.
+  </Card>
+  <Card title="Mis Pedidos" icon="shopping-bag">
+    Total orders with a completed-orders subtitle.
+  </Card>
+  <Card title="Ticket Promedio" icon="trending-up">
+    Average order value.
+  </Card>
+  <Card title="Reportes Recibidos" icon="alert-triangle">
+    Quality reports filed against this seller's products.
+  </Card>
+</CardGroup>
+
+A line chart shows daily sales for the last 7 days. A "Mis Productos Más Vendidos" section lists up to 5 top products with their sale counts.
+
+### Product inventory table
+
+The inventory table shows all products owned by the seller with columns: name/image, price, stock (meters), and category.
+
+**Inline editing** is triggered per row. When editing is active:
+
+- Name is an editable text field.
+- A file input replaces the image (uploaded as Base64, then PUT to `http://localhost:8081/api/products/{id}/image`; the response URL replaces the Base64 data).
+- Price and stock become number inputs.
+
+Save/cancel buttons appear in the actions column. On save, both `MetricsContext` and `ProductContext` are refreshed.
+
+Stock badges are colored by level:
+
+| Stock | Badge color |
+|---|---|
+| < 20 m | Red |
+| ≥ 20 m | Green |
+
+<Note>
+  The "Nuevo Producto" button is visible in the UI but its full create-product flow is not yet implemented in this version.
+</Note>
+
+## Order management — `/vendedor/pedidos`
+
+`SellerOrders.jsx` shows all orders assigned to the current seller.
+
+### Status filter
+
+Orders can be filtered by status using the tab buttons at the top of the table:
+
+| Filter | Status value | Color |
+|---|---|---|
+| Todos | — | — |
+| Preparando | `preparing` | Yellow |
+| Enviados | `shipped` | Blue |
+| Entregados | `delivered` | Green |
+
+### Order table
+
+Columns: Order ID, client name (resolved from `MetricsContext.users`), date, item count, total, status badge, and action button.
+
+**Status progression** is linear and forward-only:
+
+```text
+preparing → shipped → delivered
+```
+
+The action button changes based on the current status:
+
+- `preparing` → shows "Marcar Enviado"
+- `shipped` → shows "Marcar Entregado"
+- `delivered` → shows "Completado" (no further action)
+
+Calling `updateOrderStatus(orderId, newStatus)` from `MetricsContext` persists the change and a success notification is shown.
+
+## Stock alerts — `/vendedor/stock`
+
+`StockAlerts.jsx` aggregates stock health and open quality reports for the seller's products.
+
+### Summary cards
+
+| Card | Threshold | Color |
+|---|---|---|
+| Stock Crítico | < 10 m | Red |
+| Stock Bajo | ≥ 10 m and < `lowStockThreshold` m | Orange |
+| Agotados | 0 m | Gray |
+| Reportes Abiertos | `status === 'open'` | Yellow |
+
+The `lowStockThreshold` value is read from `MetricsContext.systemConfig` (defaults to 20 m if not configured). This threshold is set by an admin in the system configuration panel.
+
+### Alert sections
+
+Three collapsible sections list products by severity:
+
+1. **Stock Crítico — Acción Urgente**: Products under 10 m. Each row shows the product image, name, ref, price/m, and a "Reponer Urgente" button.
+2. **Stock Bajo — Planificar Reposición**: Products between 10 m and the configured threshold. Shows a "Reponer Stock" button.
+3. **Productos Agotados**: Products at 0 m, displayed with grayscale images. Shows a "Reponer" button.
+
+### Quality reports section
+
+Open bug reports (`status === 'open'`) linked to the seller's products are listed with:
+
+- Title and description.
+- Priority badge: Alta (red), Media (yellow), Baja (blue).
+- Product name, client name, and creation date.
+
+If all sections are empty, a "¡Todo en Orden!" empty state is shown.

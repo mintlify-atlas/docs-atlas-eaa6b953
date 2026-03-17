@@ -1,0 +1,150 @@
+---
+title: Database setup
+description: Create the PostgreSQL database, import the schema and seed data from the provided dump file, and configure the Java backend connection.
+---
+
+The Java backend connects to a PostgreSQL database called `tienda_digital_textiles_db`. This page explains how to create that database, import the schema, and connect the backend to it.
+
+## Prerequisites
+
+- PostgreSQL 13 or later installed and running
+- `pg_restore` available on your PATH (included with the PostgreSQL client tools)
+- The Java backend classpath-compatible JDK (see [Installation](/setup/installation))
+
+## Create the database
+
+Connect to PostgreSQL as the `postgres` superuser and create the database:
+
+```sql
+CREATE DATABASE tienda_digital_textiles_db;
+```
+
+Or run it directly from your terminal:
+
+```bash
+psql -U postgres -c "CREATE DATABASE tienda_digital_textiles_db;"
+```
+
+## Import the schema and seed data
+
+The repository includes a PostgreSQL custom-format dump at:
+
+```
+BASE DE DATOS/TIENDA DIGITAL TEXTIL.sql
+```
+
+This file contains the full database schema (tables, indexes, constraints) plus seed data including the dev user accounts.
+
+<Warning>
+  This is a **binary** PostgreSQL custom dump (`pg_dump --format=custom`), not a plain SQL file. You must use `pg_restore` to import it — running it with `psql` will not work.
+</Warning>
+
+Run `pg_restore` from the repository root:
+
+```bash
+pg_restore -U postgres -d tienda_digital_textiles_db "BASE DE DATOS/TIENDA DIGITAL TEXTIL.sql"
+```
+
+To see verbose output during the restore:
+
+```bash
+pg_restore -U postgres -d tienda_digital_textiles_db -v "BASE DE DATOS/TIENDA DIGITAL TEXTIL.sql"
+```
+
+<Note>
+  If you get a "role does not exist" error, adjust the `-U` flag to match your local PostgreSQL superuser name.
+</Note>
+
+## Verify the import
+
+Connect to the database and check that the expected tables are present:
+
+```bash
+psql -U postgres -d tienda_digital_textiles_db -c "\dt"
+```
+
+You should see tables including `users`, `products`, `categories`, `orders`, and `coupons`.
+
+## How the backend connects
+
+The Java backend uses a singleton connection managed by `conexion/Conexion.java`. It reads connection parameters from environment variables with hard-coded defaults as fallback:
+
+```java
+// conexion/Conexion.java
+private static final String URL = System.getenv("DB_URL") != null
+    ? System.getenv("DB_URL")
+    : "jdbc:postgresql://localhost:5432/tienda_digital_textiles_db";
+private static final String USER = System.getenv("DB_USER") != null
+    ? System.getenv("DB_USER")
+    : "postgres";
+private static final String PASSWORD = System.getenv("DB_PASSWORD") != null
+    ? System.getenv("DB_PASSWORD")
+    : "Mp.1025889078";
+```
+
+## Configure the connection with environment variables
+
+To use a different database host, user, or password, set these environment variables before starting the backend:
+
+<CodeGroup>
+
+```bash macOS / Linux
+export DB_URL="jdbc:postgresql://localhost:5432/tienda_digital_textiles_db"
+export DB_USER="your_postgres_user"
+export DB_PASSWORD="your_password"
+java -cp "bin:lib/gson-2.10.1.jar:lib/postgresql-42.7.3.jar" App
+```
+
+```powershell Windows (PowerShell)
+$env:DB_URL = "jdbc:postgresql://localhost:5432/tienda_digital_textiles_db"
+$env:DB_USER = "your_postgres_user"
+$env:DB_PASSWORD = "your_password"
+java -cp "bin;lib/gson-2.10.1.jar;lib/postgresql-42.7.3.jar" App
+```
+
+```bat Windows (Command Prompt)
+set DB_URL=jdbc:postgresql://localhost:5432/tienda_digital_textiles_db
+set DB_USER=your_postgres_user
+set DB_PASSWORD=your_password
+java -cp "bin;lib/gson-2.10.1.jar;lib/postgresql-42.7.3.jar" App
+```
+
+</CodeGroup>
+
+<Tip>
+  The connection uses a singleton pattern with automatic reconnection. If PostgreSQL terminates the connection due to inactivity, the backend calls `connection.isValid(3)` on every request and reconnects transparently.
+</Tip>
+
+## API endpoints served by the backend
+
+Once the backend is connected, it serves these REST contexts on `http://localhost:8081`:
+
+| Context | Handler | Description |
+|---|---|---|
+| `GET /api/products` | `ProductsHandler` | List active products with category names |
+| `POST /api/products` | `ProductsHandler` | Create a new product |
+| `PUT /api/products/:id` | `ProductsHandler` | Update a product |
+| `DELETE /api/products/:id` | `ProductsHandler` | Delete a product |
+| `PUT /api/products/:id/image` | `ProductImageHandler` | Upload a product image (Base64) |
+| `GET /api/products/pending` | `ProductsHandler` | List products awaiting moderation |
+| `GET /api/users` | `UsersHandler` | List users |
+| `GET /api/orders` | `OrdersHandler` | List orders |
+| `POST /api/login` | `AuthHandler` | Authenticate and return user object |
+| `POST /api/register` | `AuthHandler` | Register a new account (hashes password with SHA-256) |
+| `GET /api/coupons` | `CouponsHandler` | List discount coupons |
+| `GET /api/config` | `ConfigHandler` | Store configuration key-value pairs |
+| `GET /api/support` | `SupportHandler` | Support tickets |
+| `GET /uploads/*` | `StaticFileHandler` | Serve uploaded product images |
+
+## Seed user accounts
+
+The dump includes the following development accounts (passwords stored as SHA-256 hashes):
+
+| Role | Email | Password |
+|---|---|---|
+| Admin | `admin@ddtextil.com` | `admin123` |
+| Seller | `vendedor@ddtextil.com` | `vendedor123` |
+| Seller | `maria.gonzalez@ddtextil.com` | `vendedor123` |
+| Seller | `ana.martinez@ddtextil.com` | `vendedor123` |
+| Client | `cliente@ddtextil.com` | `cliente123` |
+| Client | `laura.sanchez@email.com` | `cliente123` |

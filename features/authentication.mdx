@@ -1,0 +1,225 @@
+---
+title: Authentication
+description: Login, registration, role-based access control, and the ProtectedRoute component for D&D Textil.
+---
+
+D&D Textil uses a custom JWT-less authentication system built on React Context. User sessions are persisted in `localStorage` via the `useLocalStorage` hook, and all protected routes are guarded by the `ProtectedRoute` component.
+
+## User roles
+
+The platform defines three roles. Role names are normalized to English on the frontend when the Java backend returns Spanish equivalents.
+
+| Frontend role | Backend value(s) | Dashboard route |
+|---|---|---|
+| `admin` | `admin`, `administrador` | `/admin` |
+| `seller` | `seller`, `vendedor` | `/vendedor/productos` |
+| `client` | `client`, `cliente` | `/cliente` |
+
+Normalization happens in `AuthContext.jsx` immediately after a successful login response:
+
+```jsx AuthContext.jsx
+if (normalizedRole === 'administrador' || normalizedRole === 'admin') normalizedRole = 'admin';
+else if (normalizedRole === 'vendedor') normalizedRole = 'seller';
+else if (normalizedRole === 'cliente') normalizedRole = 'client';
+```
+
+## Login flow
+
+<Steps>
+  <Step title="User submits the form">
+    `Login.jsx` calls `login(email, password)` from `useAuth()`. The function posts to `POST http://localhost:8081/api/login`.
+  </Step>
+  <Step title="Backend responds">
+    On success, the response JSON contains a `user` object with a `role` field. The `password_hash` field is stripped before the user object is saved to localStorage.
+  </Step>
+  <Step title="Role-based redirect">
+    After a successful login, `Login.jsx` reads the stored user and redirects based on role:
+
+    ```jsx Login.jsx
+    const roleRedirects = {
+      admin: '/admin',
+      seller: '/vendedor',
+      client: '/cliente',
+    };
+    const destination = roleRedirects[user?.role] || from;
+    navigate(destination, { replace: true });
+    ```
+
+    If the user arrived at `/login` because they were redirected from a protected route, the original destination (`location.state?.from?.pathname`) is used as the fallback.
+  </Step>
+  <Step title="Session persisted">
+    The normalized user object is stored under the `authUser` key in localStorage. Subsequent page loads restore the session automatically.
+  </Step>
+</Steps>
+
+<Warning>
+  The backend must be running on `http://localhost:8081` for login and registration to work. If the fetch fails with `Failed to fetch`, the context surfaces the message: "No se puede conectar con el servidor. Verifica que el backend esté corriendo."
+</Warning>
+
+## Registration flow
+
+`Register.jsx` collects name, email, password, and password confirmation. Client-side validation enforces:
+
+- Passwords must match.
+- Password must be at least 6 characters.
+
+On submit, `register(userData)` from `AuthContext` posts to `POST http://localhost:8081/api/register`. On success, it immediately calls `login()` to auto-authenticate the new user, who is then redirected to `/`.
+
+<Note>
+  New accounts created through the registration form are always assigned the `client` role by the backend. Role elevation must be done through the admin panel.
+</Note>
+
+## Password security
+
+Passwords are stored using **SHA-256 hashing** on the Java backend. This applies both to seeded accounts and to any account created via the registration form.
+
+## ProtectedRoute component
+
+`ProtectedRoute` (`src/components/ProtectedRoute.jsx`) is a wrapper component that enforces authentication and optional role checks.
+
+```jsx ProtectedRoute.jsx
+function ProtectedRoute({ children, roles }) {
+  const { user, isAuthenticated, hasRole } = useAuth();
+  const location = useLocation();
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  if (roles && !hasRole(roles)) {
+    return <Navigate to="/" replace />;
+  }
+
+  return children;
+}
+```
+
+**Props:**
+
+| Prop | Type | Description |
+|---|---|---|
+| `children` | `ReactNode` | The page or component to render if access is granted. |
+| `roles` | `string \| string[]` | One role string or an array of allowed roles. Omit to allow any authenticated user. |
+
+`hasRole` in `AuthContext` handles both the single-string and array cases:
+
+```jsx AuthContext.jsx
+const hasRole = (roles) => {
+  if (!user) return false;
+  if (Array.isArray(roles)) {
+    return roles.includes(user.role);
+  }
+  return user.role === roles;
+};
+```
+
+### Usage patterns from App.jsx
+
+<Tabs>
+  <Tab title="Any authenticated user">
+    Wrap routes that require login but no specific role (e.g., checkout):
+
+    ```jsx App.jsx
+    <Route
+      path="/checkout"
+      element={
+        <ProtectedRoute>
+          <Checkout />
+        </ProtectedRoute>
+      }
+    />
+    ```
+  </Tab>
+  <Tab title="Single role">
+    Pass a string to restrict to one role:
+
+    ```jsx App.jsx
+    <Route
+      path="/cliente"
+      element={
+        <ProtectedRoute roles="client">
+          <ClientDashboard />
+        </ProtectedRoute>
+      }
+    />
+    ```
+  </Tab>
+  <Tab title="Multiple roles">
+    Pass an array to allow more than one role. Seller routes accept both `seller` and `admin`:
+
+    ```jsx App.jsx
+    <Route
+      path="/vendedor/productos"
+      element={
+        <ProtectedRoute roles={['seller', 'admin']}>
+          <SellerProducts />
+        </ProtectedRoute>
+      }
+    />
+    ```
+  </Tab>
+</Tabs>
+
+## AuthContext API
+
+The context is provided by `AuthProvider` and consumed via the `useAuth()` hook.
+
+<AccordionGroup>
+  <Accordion title="user">
+    The currently authenticated user object from localStorage, or `null` if not logged in. Contains `id`, `name`, `email`, `role`, and any other fields returned by the backend (minus `password_hash`).
+  </Accordion>
+  <Accordion title="isAuthenticated">
+    Boolean shorthand — `true` when `user` is not null.
+  </Accordion>
+  <Accordion title="login(email, password)">
+    Async function. Posts to `POST /api/login`. Returns `{ success: true }` on success or `{ success: false, message: string }` on failure.
+  </Accordion>
+  <Accordion title="register(userData)">
+    Async function. Posts to `POST /api/register` and auto-calls `login()` on success. Accepts `{ name, email, password }`.
+  </Accordion>
+  <Accordion title="logout()">
+    Clears the `authUser` key from localStorage and resets `user` to null.
+  </Accordion>
+  <Accordion title="hasRole(roles)">
+    Returns `true` if the current user's role matches the given string or is included in the given array.
+  </Accordion>
+</AccordionGroup>
+
+## Dev credentials
+
+Use these accounts to test each role in the development environment. Passwords are SHA-256 hashed in the database.
+
+<Warning>
+  These credentials are for local development only. Do not use them in production.
+</Warning>
+
+<Tabs>
+  <Tab title="Admin">
+    | Field | Value |
+    |---|---|
+    | Email | `admin@ddtextil.com` |
+    | Password | `admin123` |
+    | Redirects to | `/admin` |
+  </Tab>
+  <Tab title="Sellers">
+    | Name | Email | Password |
+    |---|---|---|
+    | Carlos Rodríguez | `vendedor@ddtextil.com` | `vendedor123` |
+    | María González | `maria.gonzalez@ddtextil.com` | `vendedor123` |
+    | Ana Martínez | `ana.martinez@ddtextil.com` | `vendedor123` |
+
+    All seller accounts redirect to `/vendedor`.
+  </Tab>
+  <Tab title="Clients">
+    | Name | Email | Password |
+    |---|---|---|
+    | Cliente Demo | `cliente@ddtextil.com` | `cliente123` |
+    | Laura Sánchez | `laura.sanchez@email.com` | `cliente123` |
+
+    All client accounts redirect to `/cliente`.
+  </Tab>
+</Tabs>
+
+<Tip>
+  The login page (`/login`) includes one-click demo credential buttons that pre-fill the form for Admin, Vendedor, and Cliente accounts.
+</Tip>

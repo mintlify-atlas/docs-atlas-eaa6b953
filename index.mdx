@@ -1,97 +1,76 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "D&D Textil - Tienda Digital"
+description: "Full-stack digital textile store with multi-role dashboards, product catalog, shopping cart, checkout, and analytics."
 ---
 
-## Setting up
-
-Get your documentation site up and running in minutes.
-
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
-
-## Make it yours
-
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Get the store running locally in minutes
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
+  <Card title="Installation" icon="wrench" href="/setup/installation">
+    Set up dependencies, backend, and database
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+  <Card title="Store Features" icon="store" href="/features/catalog">
+    Explore the product catalog, cart, and checkout flows
   </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
+  <Card title="User Roles" icon="users" href="/features/authentication">
+    Understand client, seller, and admin access levels
   </Card>
-</Columns>
+</CardGroup>
 
-## Create beautiful pages
+## What is D&D Textil?
 
-Everything you need to create world-class documentation.
+**D&D Textil** is a full-stack e-commerce platform built for a digital textile store. It features a React 18 frontend with Vite, a Java backend for PostgreSQL connectivity, and a rich set of role-based dashboards for administrators, sellers, and clients.
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+<Info>
+  This project was developed as part of the SENA ADSO program (Análisis y Desarrollo de Software).
+</Info>
 
-## Need inspiration?
+## Key features
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+<CardGroup cols={3}>
+  <Card title="Product Catalog" icon="grid" href="/features/catalog">
+    Filterable grid with category browsing and sorting
+  </Card>
+  <Card title="Shopping Cart" icon="cart-shopping" href="/features/cart">
+    Persistent cart with localStorage and quantity controls
+  </Card>
+  <Card title="Checkout & Payment" icon="credit-card" href="/features/checkout">
+    Form validation with card and PSE payment options
+  </Card>
+  <Card title="Client Dashboard" icon="user" href="/features/client-dashboard">
+    Order history, wishlist, project calculator, and support
+  </Card>
+  <Card title="Seller Dashboard" icon="shop" href="/features/seller-dashboard">
+    Product management, orders, and stock alerts
+  </Card>
+  <Card title="Admin Dashboard" icon="shield" href="/features/admin-dashboard">
+    User management, inventory, vendor moderation, and analytics
+  </Card>
+</CardGroup>
+
+## Tech stack
+
+| Layer | Technology |
+|---|---|
+| Frontend | React 18, Vite, Tailwind CSS |
+| Animation | Framer Motion |
+| Forms | React Hook Form + Zod |
+| Routing | React Router v6 |
+| Charts | Recharts |
+| Backend | Java (PostgreSQL driver) |
+| Database | PostgreSQL |
+
+## User roles
+
+D&D Textil supports three distinct user roles, each with dedicated dashboards and route-level protection:
+
+| Role | Access |
+|---|---|
+| **Client** | Browse catalog, manage cart, checkout, view order history, wishlist, support tickets |
+| **Seller** | Manage products, view orders, monitor stock alerts |
+| **Admin** | Full access: users, inventory, analytics, vendor moderation, system configuration |
+
+<Tip>
+  See [Authentication](/features/authentication) for role setup and protected route configuration.
+</Tip>

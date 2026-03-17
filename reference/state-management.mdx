@@ -1,0 +1,416 @@
+---
+title: 'State management'
+description: 'Reference for all React Context providers, exposed values and functions, and custom hooks in D&D Textil.'
+---
+
+D&D Textil uses React Context API exclusively for global state. All providers are composed in `src/components/AppProviders.jsx` and wrapped around the entire application.
+
+## Provider tree
+
+```jsx
+// src/components/AppProviders.jsx
+<NotificationProvider>       // outermost — no dependencies
+  <AuthProvider>             // depends on useNotification
+    <MetricsProvider>        // depends on useNotification (via AuthContext indirectly)
+      <CartProvider>         // depends on useLocalStorage
+        <ProductProvider>    // independent, fetches from API
+          <UIProvider>       // independent, manages carousel + home sections
+            {children}
+          </UIProvider>
+        </ProductProvider>
+      </CartProvider>
+    </MetricsProvider>
+  </AuthProvider>
+</NotificationProvider>
+```
+
+<Note>
+  The nesting order is intentional. `AuthProvider` must be inside `NotificationProvider` because it calls `showNotification` on login/logout. `MetricsProvider` must be inside `AuthProvider` for the same reason.
+</Note>
+
+---
+
+## `NotificationContext`
+
+**File:** `src/context/NotificationContext.jsx`  
+**Hook:** `useNotification()`
+
+Manages a queue of toast notifications rendered at the bottom-right of the viewport. `Toast` components are rendered directly inside this provider using Framer Motion `AnimatePresence`.
+
+### Exposed values
+
+| Name | Type | Description |
+|---|---|---|
+| `showNotification` | `(type, message, duration?) => void` | Adds a notification to the queue. Auto-removes after `duration` ms (default `4000`). |
+
+**`type` values:** `'success'`, `'error'`, `'info'`, `'warning'`
+
+### Usage
+
+```jsx
+import { useNotification } from '../context';
+
+function MyComponent() {
+  const { showNotification } = useNotification();
+
+  const handleSave = () => {
+    // ... save logic
+    showNotification('success', 'Cambios guardados');
+  };
+}
+```
+
+---
+
+## `AuthContext`
+
+**File:** `src/context/AuthContext.jsx`  
+**Hook:** `useAuth()`
+
+Manages authentication state. The `user` object is persisted in `localStorage` under the key `'authUser'` using `useLocalStorage`. Passwords are never stored — only user metadata returned by the API.
+
+### Exposed values
+
+| Name | Type | Description |
+|---|---|---|
+| `user` | `object \| null` | The authenticated user object, or `null` when logged out |
+| `isAuthenticated` | `boolean` | `true` when `user` is not `null` |
+| `login` | `(email, password) => Promise<{success, message?}>` | POSTs to `POST /api/login`. Normalizes the role and stores user in localStorage. |
+| `register` | `(userData) => Promise<{success, message?}>` | POSTs to `POST /api/register`, then auto-logs in on success. |
+| `logout` | `() => void` | Clears the user from state and localStorage. |
+| `hasRole` | `(roles) => boolean` | Checks whether the logged-in user has the given role. Accepts a string or array of strings. |
+
+### User object shape
+
+```jsx
+{
+  id: number,
+  name: string,
+  email: string,
+  role: 'client' | 'seller' | 'admin',   // normalized from DB Spanish values
+  active: boolean,
+  suspended: boolean,
+  suspensionReason: string | null
+}
+```
+
+### Usage
+
+```jsx
+import { useAuth } from '../context';
+
+function Header() {
+  const { user, isAuthenticated, logout, hasRole } = useAuth();
+
+  return (
+    <nav>
+      {isAuthenticated && <span>Hola, {user.name}</span>}
+      {hasRole('admin') && <Link to="/admin">Admin</Link>}
+      {isAuthenticated && <button onClick={logout}>Salir</button>}
+    </nav>
+  );
+}
+```
+
+### API endpoints used
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `POST` | `http://localhost:8081/api/login` | Authenticate user |
+| `POST` | `http://localhost:8081/api/register` | Register new user |
+
+---
+
+## `CartContext`
+
+**File:** `src/context/CartContext.jsx`  
+**Hook:** `useCart()`
+
+Manages the shopping cart. Cart items and any applied coupon are persisted in `localStorage` under keys `'cart'` and `'applied_coupon'` respectively.
+
+### Exposed values
+
+| Name | Type | Description |
+|---|---|---|
+| `cartItems` | `array` | Array of cart item objects (`{ ...product, quantity }`) |
+| `appliedCoupon` | `object \| null` | The currently applied coupon object, or `null` |
+| `setAppliedCoupon` | `(coupon) => void` | Directly sets or clears the applied coupon |
+| `addToCart` | `(product, quantity?) => void` | Adds a product. If already in cart, increments quantity. Default quantity `1`. |
+| `updateQuantity` | `(productId, newQuantity) => void` | Updates quantity; removes item if `newQuantity <= 0`. |
+| `removeFromCart` | `(productId) => void` | Removes a product from the cart. |
+| `clearCart` | `() => void` | Empties the cart and clears the applied coupon. |
+| `getCartTotal` | `() => number` | Returns the sum of `price * quantity` for all items. |
+| `getCartItemCount` | `() => number` | Returns the total number of individual units in the cart. |
+| `isInCart` | `(productId) => boolean` | Returns `true` if the product is already in the cart. |
+| `getProductQuantity` | `(productId) => number` | Returns the quantity of a specific product, or `0` if not in cart. |
+
+### Usage
+
+```jsx
+import { useCart } from '../context';
+
+function ProductCard({ product }) {
+  const { addToCart, isInCart, getProductQuantity } = useCart();
+
+  return (
+    <div>
+      <p>En carrito: {getProductQuantity(product.id)}</p>
+      <button onClick={() => addToCart(product, 2)}>
+        {isInCart(product.id) ? 'Agregar más' : 'Agregar al carrito'}
+      </button>
+    </div>
+  );
+}
+```
+
+---
+
+## `ProductContext`
+
+**File:** `src/context/ProductContext.jsx`  
+**Hook:** `useProducts()`
+
+Manages the public product catalogue. Fetches from `GET /api/products` on mount and falls back to `src/data/products.json` if the backend is unreachable.
+
+### Exposed values
+
+| Name | Type | Description |
+|---|---|---|
+| `products` | `array` | Array of all active product objects |
+| `loading` | `boolean` | `true` while the initial fetch is in flight |
+| `error` | `string \| null` | Error message if the fetch failed; `null` otherwise |
+| `getProductById` | `(id) => product \| undefined` | Finds a product by `id` (type-coerced comparison) |
+| `getFeaturedProducts` | `() => array` | Returns up to 4 products where `featured === true` |
+| `addProduct` | `(newProduct) => Promise<void>` | POSTs to `/api/products` and refreshes the list |
+| `updateProduct` | `(updatedProduct) => Promise<void>` | PUTs to `/api/products/:id` and updates local state |
+| `deleteProduct` | `(id) => Promise<void>` | Soft-deletes via `DELETE /api/products/:id` (sets `active = false` in DB) |
+| `refreshProducts` | `() => void` | Re-fetches the product list from the API |
+
+### Usage
+
+```jsx
+import { useProducts } from '../context';
+
+function Catalog() {
+  const { products, loading, error } = useProducts();
+
+  if (loading) return <TruckLoader />;
+  if (error) return <p>Error: {error}</p>;
+
+  return <ProductGrid products={products} />;
+}
+```
+
+---
+
+## `MetricsContext`
+
+**File:** `src/context/MetricsContext.jsx`  
+**Hook:** `useMetrics()`
+
+The largest context in the application. Used exclusively by admin and seller dashboard pages. It loads data from the backend API on mount and falls back to mock data from `src/data/mockData.js` when the API is unavailable. The `dataSource` value (`'mock'` or `'api'`) indicates which is active.
+
+### Exposed data
+
+| Name | Type | Description |
+|---|---|---|
+| `dataSource` | `'mock' \| 'api'` | Indicates whether live API data or mock fallback is active |
+| `users` | `array` | All user accounts |
+| `orders` | `array` | All orders |
+| `products` | `array` | All products (including inactive, for admin view) |
+| `pendingProducts` | `array` | Products with `moderation_status = 'pending'` |
+| `salesData` | `array` | Monthly sales data for charts |
+| `bugReports` | `array` | Submitted bug reports |
+| `recentActivity` | `array` | Recent site activity feed (mock only) |
+| `systemConfig` | `object` | Key–value system configuration |
+| `inventoryBatches` | `array` | Fabric batch/lot records |
+| `wasteEvents` | `array` | Logged fabric waste events |
+| `coupons` | `array` | All discount coupons |
+| `supportTickets` | `array` | All support tickets |
+| `regionSales` | `array` | Sales by Colombian region (mock only) |
+| `stockThresholds` | `array` | Minimum stock thresholds per fabric type |
+
+### Exposed functions — users
+
+| Function | Signature | Description |
+|---|---|---|
+| `updateUserRole` | `(userId, newRole) => void` | Changes a user's role in local state |
+| `toggleUserActive` | `(userId) => void` | Toggles the `active` flag for a user |
+| `getUsersByRole` | `(role) => array` | Filters users by role |
+
+### Exposed functions — products
+
+| Function | Signature | Description |
+|---|---|---|
+| `getProductsBySeller` | `(sellerId) => array` | Returns products belonging to a seller (type-safe comparison) |
+| `addProduct` | `(newProduct) => Promise<void>` | POSTs to `/api/products` and refreshes |
+| `updateProduct` | `(productId, updates) => Promise<void>` | PUTs to `/api/products/:id` |
+| `deleteProduct` | `(productId) => Promise<void>` | Soft-deletes via `DELETE /api/products/:id` |
+| `refreshData` | `() => Promise<void>` | Re-fetches products, pending products, and orders |
+| `approveProduct` | `(productId) => Promise<void>` | Sets `moderation_status = 'approved'` |
+| `rejectProduct` | `(productId, reason) => Promise<void>` | Sets `moderation_status = 'rejected'` |
+
+### Exposed functions — orders
+
+| Function | Signature | Description |
+|---|---|---|
+| `getOrdersBySeller` | `(sellerId) => array` | Filters orders by `sellerId` |
+| `getOrdersByClient` | `(clientId) => array` | Filters orders by `clientId` |
+| `updateOrderStatus` | `(orderId, newStatus) => Promise<void>` | PUTs to `/api/orders/:id/status` |
+
+### Exposed functions — inventory
+
+| Function | Signature | Description |
+|---|---|---|
+| `addBatch` | `(newBatch) => void` | Adds a fabric batch and persists to config table |
+| `updateBatch` | `(batchId, updates) => void` | Updates batch fields and persists to config table |
+| `logWaste` | `(wasteEvent) => void` | Appends a waste event and persists to config table |
+| `updateStockThreshold` | `(fabricType, minMeters) => void` | Updates a threshold and persists to config table |
+
+### Exposed functions — coupons
+
+| Function | Signature | Description |
+|---|---|---|
+| `createCoupon` | `(newCoupon) => Promise<void>` | Creates coupon optimistically, then POSTs to `/api/coupons` |
+| `deactivateCoupon` | `(couponId) => Promise<void>` | PUTs to `/api/coupons/:id/deactivate` |
+| `validateCoupon` | `(code, cartTotal, userOrders) => {valid, coupon?, message?}` | Validates code, expiry, min purchase, first-time use, and max uses |
+
+### Exposed functions — support
+
+| Function | Signature | Description |
+|---|---|---|
+| `createTicket` | `(newTicket) => Promise<void>` | POSTs to `/api/support/tickets` |
+| `updateTicketStatus` | `(ticketId, newStatus) => Promise<void>` | PUTs to `/api/support/tickets/:id/status` |
+| `assignTicket` | `(ticketId, userId) => void` | Sets `assignedTo` in local state |
+| `updateBugReportStatus` | `(reportId, newStatus, assignedTo?) => Promise<void>` | PUTs to `/api/support/bugs/:id/status` |
+| `getBugReportsBySeller` | `(sellerId) => array` | Filters bug reports by `sellerId` |
+| `updateSellerCommission` | `(sellerId, commissionRate) => void` | Updates seller commission in local state |
+| `toggleSellerSuspension` | `(sellerId, reason?) => void` | Toggles seller `suspended` flag in local state |
+
+### Usage
+
+```jsx
+import { useMetrics } from '../context/MetricsContext';
+
+function AdminOverview() {
+  const { users, orders, dataSource, getUsersByRole } = useMetrics();
+  const sellers = getUsersByRole('vendedor');
+
+  return (
+    <div>
+      {dataSource === 'mock' && <p>Usando datos de demostración</p>}
+      <p>Total usuarios: {users.length}</p>
+      <p>Total pedidos: {orders.length}</p>
+    </div>
+  );
+}
+```
+
+---
+
+## `UIContext`
+
+**File:** `src/context/UIContext.jsx`  
+**Hook:** `useUI()`
+
+Manages presentation-layer state for the home page carousel and section visibility. Used by `ManageCarousel` and `ManageHome` admin pages.
+
+### Exposed values
+
+| Name | Type | Description |
+|---|---|---|
+| `carouselSlides` | `array` | Array of slide objects — default has 3 slides |
+| `addSlide` | `(slide) => void` | Appends a new slide (assigns `id: Date.now()`) |
+| `removeSlide` | `(id) => void` | Removes a slide by `id` |
+| `updateSlide` | `(id, updatedSlide) => void` | Replaces a slide object by `id` |
+| `homeSections` | `{ hero, carousel, featured, benefits }` | Visibility flags for each home page section |
+| `toggleSection` | `(sectionId) => void` | Toggles a section's visibility flag |
+
+### Carousel slide shape
+
+```jsx
+{
+  id: number,           // Date.now() for new slides
+  title: string,        // e.g. 'Nueva Colección 2024'
+  subtitle: string,
+  image: string,        // root-relative path e.g. '/images/carousel-nueva-coleccion.png'
+  cta: string           // call-to-action button label
+}
+```
+
+### Usage
+
+```jsx
+import { useUI } from '../context';
+
+function ManageCarousel() {
+  const { carouselSlides, addSlide, removeSlide, updateSlide } = useUI();
+
+  return (
+    <ul>
+      {carouselSlides.map(slide => (
+        <li key={slide.id}>
+          {slide.title}
+          <button onClick={() => removeSlide(slide.id)}>Eliminar</button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+```
+
+---
+
+## Custom hooks
+
+### `useLocalStorage(key, initialValue)`
+
+**File:** `src/hooks/useLocalStorage.js`
+
+A drop-in replacement for `useState` that automatically reads from and writes to `localStorage`. Supports functional updater form (`setValue(prev => ...)`).
+
+```js
+import { useLocalStorage } from '../hooks/useLocalStorage';
+
+const [theme, setTheme] = useLocalStorage('theme', 'light');
+// Reading: JSON.parse(localStorage.getItem('theme')) || 'light'
+// Writing: localStorage.setItem('theme', JSON.stringify(newValue))
+```
+
+| Parameter | Type | Description |
+|---|---|---|
+| `key` | `string` | The `localStorage` key |
+| `initialValue` | `any` | Default value when the key does not exist in storage |
+
+**Returns:** `[storedValue, setValue]` — same signature as `useState`.
+
+**Keys used by the application:**
+
+| Key | Context / Hook | Type |
+|---|---|---|
+| `'authUser'` | `AuthContext` | `User \| null` |
+| `'cart'` | `CartContext` | `CartItem[]` |
+| `'applied_coupon'` | `CartContext` | `Coupon \| null` |
+| `'darkMode'` | `useDarkMode` | `boolean` |
+
+### `useDarkMode()`
+
+**File:** `src/hooks/useDarkMode.js`
+
+Persists the dark mode preference in `localStorage` under `'darkMode'` and applies or removes the `dark` class on `document.documentElement` via a `useEffect`.
+
+```js
+import { useDarkMode } from '../hooks/useDarkMode';
+
+function ThemeToggle() {
+  const [darkMode, toggleDarkMode] = useDarkMode();
+
+  return (
+    <button onClick={toggleDarkMode}>
+      {darkMode ? 'Modo claro' : 'Modo oscuro'}
+    </button>
+  );
+}
+```
+
+**Returns:** `[darkMode: boolean, toggleDarkMode: () => void]`

@@ -1,0 +1,159 @@
+---
+title: 'Vendor moderation'
+description: 'Tools for vetting new seller product submissions and monitoring ongoing seller performance metrics.'
+---
+
+The vendor moderation module gives admins control over what products appear in the catalogue and how individual sellers are managed. It consists of two tools under the **Moderación** section of the admin dashboard.
+
+<CardGroup cols={2}>
+  <Card title="Approval queue" icon="list-check" href="/features/vendor-moderation#approval-queue">
+    Review, preview, approve, or reject pending product submissions from sellers.
+  </Card>
+  <Card title="Vendor performance" icon="chart-bar" href="/features/vendor-moderation#vendor-performance-dashboard">
+    Monitor seller revenue, order counts, commission rates, and suspension status.
+  </Card>
+</CardGroup>
+
+---
+
+## Approval queue
+
+**Route:** `/admin/moderacion/aprobacion`  
+**Component:** `src/pages/admin/Vetting/ApprovalQueue.jsx`
+
+The approval queue shows every product submitted by sellers that has `status === 'pending'`. Pending products do not appear in the public catalogue until an admin approves them.
+
+Data comes from `pendingProducts` in `MetricsContext`. After an approval decision, `refreshProducts()` from `ProductContext` is called to sync the live catalogue.
+
+### Filtering by seller
+
+A dropdown at the top right of the page lists all sellers who have pending submissions. Selecting a seller filters the grid to show only that seller's products. The dropdown entry for each seller shows their pending count.
+
+### Product card grid
+
+Pending products are displayed in a responsive card grid (2 columns on large screens, 3 on extra-large). Each card shows:
+
+- Product image (falls back to `/placeholder.png`)
+- Yellow **Pendiente** badge
+- Product name, category, and truncated description
+- Price in thousands (e.g. `$45k`)
+- Seller name with first-letter avatar and submission date
+
+### Actions per product
+
+Each card has three action buttons:
+
+<AccordionGroup>
+  <Accordion title="Ver (preview)">
+    Opens a full-screen modal showing the product image, name, price, full description, and seller information. The modal also provides **Aprobar** and **Rechazar** buttons so you can make a decision without closing the preview.
+  </Accordion>
+  <Accordion title="Aprobar">
+    Calls `approveProduct(productId)` immediately and then calls `refreshProducts()` to push the product into the live catalogue. No confirmation step.
+  </Accordion>
+  <Accordion title="Rechazar">
+    Opens the rejection modal (see below).
+  </Accordion>
+</AccordionGroup>
+
+### Rejection modal
+
+Rejecting a product requires a written reason. This reason is stored and can be communicated back to the seller.
+
+<Steps>
+  <Step title="Click Rechazar">
+    Either on the card or inside the preview modal.
+  </Step>
+  <Step title="Write a rejection reason">
+    Describe what the seller needs to fix. For example: *"Las fotos no muestran claramente el producto ni la composición de la tela."*
+  </Step>
+  <Step title="Confirm">
+    Click **Confirmar Rechazo**. The button is disabled until the text area is non-empty. The rejection calls `rejectProduct(productId, rejectReason)` in `MetricsContext`.
+  </Step>
+</Steps>
+
+<Warning>
+  The rejection reason field cannot be blank. Leaving a clear, actionable message helps sellers resubmit correctly and reduces re-review cycles.
+</Warning>
+
+### Empty state
+
+When there are no pending products (or none match the seller filter), a **¡Todo al día!** empty state is shown. This is the desired steady state of the queue.
+
+---
+
+## Vendor performance dashboard
+
+**Route:** `/admin/moderacion/vendedores`  
+**Component:** `src/pages/admin/Vetting/VendorPerformance.jsx`
+
+The vendor performance dashboard lists all users with `role === 'seller'` and enriches them with aggregated metrics from `getAllSellersMetrics(sellers, orders, bugReports)` in `metricsUtils`.
+
+### Summary cards
+
+| Card | Description |
+|---|---|
+| Total Vendedores | Count of all seller accounts |
+| Vendedores Activos | Sellers without the `suspended` flag |
+| Suspendidos | Sellers with `suspended === true` |
+| Comisión Promedio | Mean `commissionRate` across all sellers |
+
+### Sales comparison chart
+
+A Recharts `BarChart` compares the top 5 sellers by sales volume and order count using a dual y-axis layout:
+
+- **Left axis (purple `#8B5CF6`)** — sales in thousands of COP
+- **Right axis (amber `#F59E0B`)** — order count
+
+Seller names are truncated to the first word for readability.
+
+### Sellers table
+
+The full seller list is displayed in a table with these columns:
+
+| Column | Description |
+|---|---|
+| Vendedor | Avatar, name, and email |
+| Ventas | Total revenue formatted as COP |
+| Pedidos | Total order count (blue badge) |
+| Comisión % | Editable commission rate |
+| Reportes | Count of bug reports linked to this seller, with an alert icon if > 3 |
+| Estado | Active (green) or Suspended (red) badge with suspension reason |
+| Control | Toggle button to suspend or reactivate |
+
+Suspended sellers appear at 50 % opacity in the table.
+
+### Editing commission rate
+
+<Steps>
+  <Step title="Click the commission value">
+    Click the green percentage shown in the **Comisión %** column. The cell switches to an editable number input pre-filled with the current rate.
+  </Step>
+  <Step title="Enter the new rate">
+    Type the new percentage (numeric). Press **Enter** or click outside the field.
+  </Step>
+  <Step title="Save">
+    The new rate is saved via `updateSellerCommission(sellerId, newRate)` in `MetricsContext`.
+  </Step>
+</Steps>
+
+### Suspending a seller
+
+<Steps>
+  <Step title="Click the toggle button">
+    In the **Control** column, click the red toggle icon for the seller you want to suspend.
+  </Step>
+  <Step title="Write a suspension reason">
+    The suspension modal appears. Enter a reason, for example: *"Múltiples reportes de calidad de productos sin resolución."* The reason is stored on the seller record.
+  </Step>
+  <Step title="Confirm">
+    Click **Confirmar Suspensión**. The button is disabled until the reason field is non-empty. `toggleSellerSuspension(sellerId, reason)` is called in `MetricsContext`.
+  </Step>
+</Steps>
+
+### Reactivating a suspended seller
+
+For a seller that is already suspended, the toggle button switches to a green reactivation icon. Clicking it calls `toggleSellerSuspension(sellerId)` without requiring a reason, and immediately restores the seller to active status.
+
+<Warning>
+  Suspending a seller does not automatically unpublish their existing products from the catalogue. If you need to remove their listings, do so separately through the product management tools.
+</Warning>

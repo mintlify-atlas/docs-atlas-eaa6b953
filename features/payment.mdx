@@ -1,0 +1,205 @@
+---
+title: "Payment"
+description: "Payment page: credit/debit card and PSE bank transfer methods, interactive card preview, Zod validation schemas, and the simulated payment flow."
+---
+
+The payment page (`/pago`) lets users choose between two methods — credit/debit card (`card`) or PSE Colombian bank transfer (`pse`) — through a two-button tab interface. State and processing logic live in `Payment.jsx`; rendering is delegated to `PaymentForm`, `PSEForm`, and `CardPreview`.
+
+## Payment method selection
+
+```jsx
+const [paymentMethod, setPaymentMethod] = useState('card');
+```
+
+Switching tabs re-mounts the active form with a Framer Motion fade-in (`opacity: 0 → 1`, `y: 20 → 0`, `duration: 0.3`). The total to pay is always visible below the tab selector, read from `getCartTotal()`.
+
+## Card payment
+
+### CardPreview
+
+`CardPreview` receives five props from `Payment.jsx`:
+
+| Prop | Type | Description |
+|---|---|---|
+| `cardNumber` | string | Raw digit string from the form field |
+| `cardHolder` | string | Cardholder name |
+| `expiryDate` | string | Formatted as `MM/AA` |
+| `cvv` | string | 3–4 digit string |
+| `isFlipped` | boolean | Flips the card to show the back when `true` |
+| `cardType` | `'visa' \| 'mastercard' \| 'unknown'` | Detected from card number |
+
+Card type detection runs in `Payment.jsx`:
+
+```jsx
+const detectCardType = (number) => {
+    const cleaned = number.replace(/\s/g, '');
+    if (/^4/.test(cleaned)) return 'visa';
+    if (/^5[1-5]/.test(cleaned)) return 'mastercard';
+    return 'unknown';
+};
+```
+
+The card flips to show the CVV on the back whenever the CVV input is focused (`onCVVFocus` → `setIsCVVFocused(true)`). It flips back on blur.
+
+**Card number formatting:** `CardPreview` internally groups the card number into four 4-character blocks using `.match(/.{1,4}/g)`. Unfilled positions are padded with `#`. Each block animates in independently with a `delay: index * 0.05` stagger.
+
+**3D tilt effect:** On mouse move, the card tilts up to ±8° on both axes using Framer Motion's `rotateX`/`rotateY`. The effect is disabled if `prefers-reduced-motion: reduce` is set.
+
+**Card logos:** Visa renders as the text `VISA`; Mastercard renders as two overlapping circles (`bg-red-500` and `bg-yellow-500`). Unknown card types show no logo.
+
+### PaymentForm
+
+`PaymentForm` uses `react-hook-form` with `zodResolver(cardPaymentSchema)` and `mode: 'onChange'` so errors appear as the user types.
+
+Field values are mirrored to `CardPreview` in real time via `onCardDataChange`:
+
+```jsx
+React.useEffect(() => {
+    onCardDataChange(watchedFields);
+}, [watchedFields, onCardDataChange]);
+```
+
+Three input formatters run on `onInput` to keep values clean:
+
+| Field | Formatter behavior |
+|---|---|
+| `cardNumber` | Strips non-digits, truncates to 16 characters |
+| `expiryDate` | Strips non-digits, inserts `/` after the 2nd digit, max 5 chars |
+| `cvv` | Strips non-digits, max 4 chars |
+
+The submit button is disabled when `!isValid || isProcessing`. While processing, the button shows a spinning border animation and the label "Procesando...".
+
+### cardPaymentSchema (Zod)
+
+```javascript
+export const cardPaymentSchema = z.object({
+    cardholderName: z
+        .string()
+        .min(3, 'El nombre debe tener al menos 3 caracteres')
+        .regex(/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/, 'Solo se permiten letras'),
+
+    cardNumber: z
+        .string()
+        .regex(/^\d{16}$/, 'El número de tarjeta debe tener 16 dígitos'),
+
+    expiryDate: z
+        .string()
+        .regex(/^(0[1-9]|1[0-2])\/\d{2}$/, 'Formato inválido (MM/AA)')
+        .refine((date) => {
+            const [month, year] = date.split('/');
+            const expiry = new Date(2000 + parseInt(year), parseInt(month) - 1);
+            return expiry > new Date();
+        }, 'La tarjeta está vencida'),
+
+    cvv: z.string().regex(/^\d{3,4}$/, 'CVV debe tener 3 o 4 dígitos'),
+
+    documentType: z.string().min(1, 'Selecciona un tipo de documento'),
+
+    documentNumber: z
+        .string()
+        .min(6, 'Número de documento inválido')
+        .regex(/^\d+$/, 'Solo se permiten números'),
+});
+```
+
+The `documentType` field is a `<select>` populated from `documentTypes`:
+
+| Value | Label |
+|---|---|
+| `CC` | Cédula de Ciudadanía |
+| `CE` | Cédula de Extranjería |
+| `NIT` | NIT |
+| `Pasaporte` | Pasaporte |
+
+## PSE payment
+
+`PSEForm` also uses `react-hook-form` with `zodResolver(psePaymentSchema)` and `mode: 'onChange'`.
+
+### PSE form fields
+
+| Field | Input type | Description |
+|---|---|---|
+| `bank` | `<select>` | One of 13 Colombian banks |
+| `personType` | Radio (`natural` / `juridica`) | Legal entity type |
+| `email` | `email` | Email for transaction confirmation |
+
+### psePaymentSchema (Zod)
+
+```javascript
+export const psePaymentSchema = z.object({
+    bank: z.string().min(1, 'Selecciona un banco'),
+    personType: z.enum(['natural', 'juridica'], {
+        errorMap: () => ({ message: 'Selecciona un tipo de persona' })
+    }),
+    email: z.string().email('Correo electrónico inválido'),
+});
+```
+
+### Supported banks
+
+The `colombianBanks` array exported from `paymentSchema.js` contains 13 banks:
+
+<CodeGroup>
+
+```javascript paymentSchema.js
+export const colombianBanks = [
+    'Bancolombia',
+    'Banco de Bogotá',
+    'Davivienda',
+    'BBVA Colombia',
+    'Banco Caja Social',
+    'Banco Agrario',
+    'Banco AV Villas',
+    'Banco Popular',
+    'Banco Occidente',
+    'Colpatria',
+    'Banco Falabella',
+    'Banco Pichincha',
+    'Banco Cooperativo Coopcentral',
+];
+```
+
+</CodeGroup>
+
+## Payment processing flow
+
+Both `handleCardPayment` and `handlePSEPayment` follow the same pattern:
+
+<Steps>
+  <Step title="Set processing state">
+    `setIsProcessing(true)` disables the submit button and shows the spinner.
+  </Step>
+  <Step title="Simulate payment">
+    `simulatePayment(data, method)` returns a resolved promise after 2,500 ms with a `success: true` result and a generated `transactionId` (`'TXN-' + Date.now()`).
+  </Step>
+  <Step title="Persist payment result">
+    On success, the result is written to `localStorage` under `'lastPayment'` with a `date` timestamp.
+
+    ```jsx
+    localStorage.setItem('lastPayment', JSON.stringify({
+        ...result,
+        date: new Date().toISOString(),
+    }));
+    ```
+  </Step>
+  <Step title="Clear cart and notify">
+    `clearCart()` empties the cart. `showNotification('success', '...')` shows a toast.
+  </Step>
+  <Step title="Navigate to confirmation">
+    The user is sent to `/confirmacion` where the order and payment summaries can be read from `localStorage`.
+  </Step>
+</Steps>
+
+<Warning>
+  `simulatePayment` always resolves with `success: true`. Error handling in the `catch` block calls `showNotification('error', '...')` and resets `isProcessing`, but in the current implementation a real payment gateway is not wired up.
+</Warning>
+
+## Connecting checkout to payment
+
+The data flow across the two pages relies on `localStorage`:
+
+| Key | Written by | Read by |
+|---|---|---|
+| `lastOrder` | `Checkout.jsx` on form submit | `/confirmacion` page |
+| `lastPayment` | `Payment.jsx` on success | `/confirmacion` page |
+| `cart` | `CartContext` | `CartContext` |

@@ -1,0 +1,181 @@
+---
+title: Environment configuration
+description: Configure the Vite dev server, API proxy, Tailwind CSS dark mode, custom color palette, fonts, and animations for D&D Textil.
+---
+
+D&D Textil uses Vite as its build tool and Tailwind CSS for styling. Both are configured through files in the project root. No `.env` file is required for local development — all defaults are baked into the config files.
+
+## Vite configuration
+
+The Vite config lives at `vite.config.js` in the project root.
+
+```javascript vite.config.js
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import { fileURLToPath, URL } from 'node:url'
+
+export default defineConfig({
+  plugins: [react()],
+  resolve: {
+    alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+    },
+  },
+  server: {
+    host: '0.0.0.0',
+    port: 3001,
+    strictPort: false,
+    open: true,
+    allowedHosts: true,
+    proxy: {
+      '/uploads': {
+        target: 'http://localhost:8081',
+        changeOrigin: true
+      }
+    }
+  },
+})
+```
+
+### Key settings
+
+| Option | Value | Effect |
+|---|---|---|
+| `server.host` | `0.0.0.0` | Listens on all network interfaces, not just `localhost` |
+| `server.port` | `3001` | Dev server runs on port 3001 |
+| `server.strictPort` | `false` | Falls back to another port if 3001 is already in use |
+| `server.open` | `true` | Opens the browser automatically on `npm run dev` |
+| `server.allowedHosts` | `true` | Allows requests from any hostname (useful for Codespaces / tunnels) |
+| `resolve.alias['@']` | `./src` | Lets you import from `@/components/Foo` instead of `../../components/Foo` |
+
+### Upload proxy
+
+The `proxy` rule forwards any request to `/uploads/*` from the Vite dev server to the Java backend on `http://localhost:8081`. This means product image URLs like `/uploads/product-42.jpg` work in the browser without CORS issues during development.
+
+```javascript
+proxy: {
+  '/uploads': {
+    target: 'http://localhost:8081',
+    changeOrigin: true
+  }
+}
+```
+
+<Note>
+  In production you would configure your reverse proxy (nginx, Caddy, etc.) to route `/uploads` to the Java server directly.
+</Note>
+
+## Tailwind CSS configuration
+
+Tailwind is configured in `tailwind.config.js`. The file sets up the content glob, enables class-based dark mode, extends the default theme with custom colors, fonts, and animations, and wires in PostCSS.
+
+### Dark mode
+
+Dark mode uses the `class` strategy. To activate dark mode, add the `dark` class to the `<html>` element:
+
+```html
+<html class="dark">
+```
+
+The `useDarkMode` hook at `src/hooks/useDarkMode.js` manages this automatically and persists the preference in `localStorage`.
+
+```javascript tailwind.config.js (excerpt)
+darkMode: 'class',
+```
+
+### Color palette
+
+The theme extends Tailwind with three custom color scales.
+
+```javascript tailwind.config.js
+colors: {
+  primary: {
+    50:  '#fff7ed',
+    100: '#ffedd5',
+    200: '#fed7aa',
+    300: '#fdba74',
+    400: '#fb923c',
+    500: '#f97316',  // brand orange
+    600: '#ea580c',
+    700: '#c2410c',
+    800: '#9a3412',
+    900: '#7c2d12',
+  },
+  secondary: {
+    50:  '#fafafa',
+    100: '#f4f4f5',
+    200: '#e4e4e7',
+    300: '#d4d4d8',
+    400: '#a1a1aa',
+    500: '#71717a',  // neutral zinc
+    600: '#52525b',
+    700: '#3f3f46',
+    800: '#27272a',
+    900: '#18181b',
+  },
+  accent: {
+    // same scale as primary — used for decorative highlights
+    500: '#f97316',
+    // ...
+  },
+},
+```
+
+To customize the brand color, update the `primary` scale. Every component using `text-primary-*`, `bg-primary-*`, or `border-primary-*` will pick up the change automatically.
+
+<Tip>
+  The Mintlify docs site is configured to use `#f97316` (primary-500) as its primary color in `docs.json`, matching the app's brand color exactly.
+</Tip>
+
+### Typography
+
+Two custom font families are registered:
+
+```javascript tailwind.config.js
+fontFamily: {
+  sans:    ['Inter', 'system-ui', 'sans-serif'],
+  display: ['Outfit', 'Inter', 'sans-serif'],
+},
+```
+
+`font-sans` is the default body font. `font-display` is used for headings and hero sections.
+
+### Custom animations
+
+Four named animations are available as Tailwind utilities:
+
+| Class | Duration | Effect |
+|---|---|---|
+| `animate-fade-in` | 0.5s | Fades element from opacity 0 to 1 |
+| `animate-slide-up` | 0.5s | Slides element up from 20 px below |
+| `animate-slide-down` | 0.5s | Slides element down from 20 px above |
+| `animate-scale-in` | 0.3s | Scales element from 90% to 100% |
+| `animate-float` | 3s (loop) | Bobs element 10 px up and down continuously |
+
+## PostCSS configuration
+
+PostCSS is configured in `postcss.config.js` with two plugins:
+
+```javascript postcss.config.js
+export default {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {},
+  },
+}
+```
+
+`autoprefixer` automatically adds vendor prefixes (`-webkit-`, `-moz-`, etc.) to your CSS output.
+
+## Content paths
+
+Tailwind scans the following paths for class usage. Classes not found in these files are purged from the production build.
+
+```javascript tailwind.config.js
+content: [
+  "./index.html",
+  "./src/**/*.{js,ts,jsx,tsx}",
+],
+```
+
+If you add a new file outside `src/` that uses Tailwind classes, add its path to the `content` array.

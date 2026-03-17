@@ -1,0 +1,143 @@
+---
+title: 'Routing'
+description: 'Complete route reference for D&D Textil — every path, its component, and the required access level.'
+---
+
+All routes are defined in `src/App.jsx` using React Router v6 `<Routes>` inside `<BrowserRouter>`. Route transitions are animated with Framer Motion `<AnimatePresence mode="wait">`.
+
+Access control is enforced by the `ProtectedRoute` component (`src/components/ProtectedRoute.jsx`), which checks `isAuthenticated` and optionally validates `user.role` against a required role or list of roles from `AuthContext`.
+
+## Public routes
+
+Accessible to any visitor — no authentication required.
+
+| Path | Component | Description |
+|---|---|---|
+| `/` | `pages/Home` | Home page with hero, carousel, featured products, and benefits |
+| `/catalogo` | `pages/Catalog` | Product catalogue with filters and sorting |
+| `/producto/:id` | `pages/ProductDetail` | Individual product page with image gallery and add-to-cart |
+| `/carrito` | `pages/Cart` | Shopping cart with quantity controls |
+| `/nosotros` | `pages/About` | About D&D Textil page |
+| `/contacto` | `pages/Contact` | Contact form page |
+| `/login` | `pages/Login` | Login form |
+| `/registro` | `pages/Register` | New account registration |
+| `/reportar-fallo` | `pages/BugReport` | Public bug / issue report form |
+| `/loader-demo` | `pages/LoaderDemo` | Development demo of the `TruckLoader` animation |
+
+## Protected routes — authenticated users
+
+Require the user to be logged in (`isAuthenticated === true`). No specific role is checked.
+
+| Path | Component | Description |
+|---|---|---|
+| `/checkout` | `pages/Checkout` | Checkout form (shipping, payment method) |
+| `/confirmacion` | `pages/OrderConfirmation` | Order confirmation screen |
+| `/pago` | `pages/payment/Payment` | Payment processing page |
+
+## Client routes
+
+Require `user.role === 'client'`.
+
+| Path | Component | Description |
+|---|---|---|
+| `/cliente` | `pages/client/ClientDashboard` | Client dashboard overview |
+| `/perfil` | `pages/client/Profile` | Client profile (legacy path) |
+| `/mis-pedidos` | `pages/client/OrderHistory` | Order history (legacy path) |
+| `/cliente/pedidos` | `pages/client/Orders/OrderHistory` | Full order history |
+| `/cliente/pedidos/rastreo` | `pages/client/Orders/OrderTracking` | Live order tracking |
+| `/cliente/coleccion` | `pages/client/Collection/Wishlist` | Saved / wishlist products |
+| `/cliente/coleccion/calculadora` | `pages/client/Collection/ProjectCalculator` | Fabric project calculator |
+| `/cliente/soporte/nuevo` | `pages/client/Support/NewReport` | Open a new support ticket |
+| `/cliente/soporte/tickets` | `pages/client/Support/MyTickets` | View own support tickets |
+| `/cliente/configuracion` | `pages/client/Settings/Profile` | Edit profile settings |
+| `/cliente/configuracion/direcciones` | `pages/client/Settings/AddressBook` | Manage saved addresses |
+
+## Seller routes
+
+Require `user.role === 'seller'` **or** `user.role === 'admin'` (admins can access all seller views).
+
+| Path | Component | Description |
+|---|---|---|
+| `/vendedor` | `pages/seller/SellerDashboard` | Seller dashboard overview (also serves `/vendedor/productos`) |
+| `/vendedor/productos` | `pages/seller/SellerDashboard` | Manage own product listings |
+| `/vendedor/pedidos` | `pages/seller/SellerOrders` | View and update orders assigned to this seller |
+| `/vendedor/stock` | `pages/seller/StockAlerts` | Low-stock alerts for own products |
+| `/vendedor/configuracion` | `pages/client/Settings/Profile` | Seller profile settings (reuses client settings component) |
+
+## Admin routes
+
+Require `user.role === 'admin'`.
+
+### Dashboard and users
+
+| Path | Component | Description |
+|---|---|---|
+| `/admin` | `pages/admin/AdminOverview` | Admin overview with KPIs and recent activity |
+| `/admin/usuarios` | `pages/admin/UserManagement` | Manage all user accounts and roles |
+| `/admin/vendedores` | `pages/admin/SellerMetrics` | Seller performance metrics |
+| `/admin/clientes` | `pages/admin/ClientMetrics` | Client activity metrics |
+| `/admin/productos` | `pages/admin/AdminProducts` | Full product catalogue management |
+| `/admin/carrusel` | `pages/admin/ManageCarousel` | Edit home-page carousel slides |
+| `/admin/home` | `pages/admin/ManageHome` | Toggle home page section visibility |
+| `/admin/reportes` | `pages/admin/AdminBugReports` | Review submitted bug reports |
+| `/admin/configuracion` | `pages/admin/SystemConfig` | System configuration settings |
+
+### Inventory management
+
+| Path | Component | Description |
+|---|---|---|
+| `/admin/inventario/lotes` | `pages/admin/Inventory/BatchControl` | Fabric batch/lot management |
+| `/admin/inventario/merma` | `pages/admin/Inventory/WasteCalculator` | Log and calculate fabric waste |
+| `/admin/inventario/alertas` | `pages/admin/Inventory/StockSettings` | Configure stock alert thresholds |
+| `/admin/inventario/historial` | `pages/admin/Inventory/MovementHistory` | View inventory movement history |
+
+### Vendor moderation
+
+| Path | Component | Description |
+|---|---|---|
+| `/admin/moderacion/aprobacion` | `pages/admin/Vetting/ApprovalQueue` | Review and approve/reject pending products |
+| `/admin/moderacion/vendedores` | `pages/admin/Vetting/VendorPerformance` | Monitor vendor performance and apply suspensions |
+
+### Analytics
+
+| Path | Component | Description |
+|---|---|---|
+| `/admin/analytics/mapa-ventas` | `pages/admin/Analytics/SalesHeatMap` | Geographic sales heat map (Colombia regions) |
+| `/admin/analytics/rotacion` | `pages/admin/Analytics/RotationRanking` | Product rotation ranking |
+| `/admin/analytics/devoluciones` | `pages/admin/Analytics/ReturnsAnalysis` | Returns and refund analysis |
+| `/admin/analytics/proyeccion` | `pages/admin/Analytics/RevenueProjection` | Revenue projection charts |
+
+### Support
+
+| Path | Component | Description |
+|---|---|---|
+| `/admin/soporte/tickets` | `pages/admin/Support/TicketManagement` | View and manage all support tickets |
+| `/admin/soporte/cupones` | `pages/admin/Support/CouponCreation` | Create and deactivate discount coupons |
+
+## Role normalization
+
+Database roles are stored in Spanish. `AuthContext` normalizes them to English on login:
+
+```jsx
+if (normalizedRole === 'administrador' || normalizedRole === 'admin') normalizedRole = 'admin';
+else if (normalizedRole === 'vendedor') normalizedRole = 'seller';
+else if (normalizedRole === 'cliente') normalizedRole = 'client';
+```
+
+`ProtectedRoute` then compares against the normalized value:
+
+```jsx
+// Single role
+<ProtectedRoute roles="client">
+  <ClientDashboard />
+</ProtectedRoute>
+
+// Multiple roles
+<ProtectedRoute roles={['seller', 'admin']}>
+  <SellerProducts />
+</ProtectedRoute>
+```
+
+<Note>
+  The `roles` prop is optional on `ProtectedRoute`. When omitted, only authentication is checked — any logged-in user can access the route regardless of role.
+</Note>

@@ -1,0 +1,295 @@
+---
+title: 'Database schema'
+description: 'PostgreSQL schema reference for D&D Textil — tables, columns, types, and the Java backend connection configuration.'
+---
+
+D&D Textil uses a PostgreSQL database named `tienda_digital_textiles_db`. The schema is defined across the original SQL dump (`BASE DE DATOS/TIENDA DIGITAL TEXTIL.sql`) and three migration scripts in the `backend-java/conexionPostgres/` directory.
+
+## Connection configuration
+
+The Java backend connects using the `conexion/Conexion.java` singleton. Connection parameters can be overridden with environment variables.
+
+```java
+// conexion/Conexion.java
+private static final String URL = System.getenv("DB_URL") != null
+    ? System.getenv("DB_URL")
+    : "jdbc:postgresql://localhost:5432/tienda_digital_textiles_db";
+private static final String USER = System.getenv("DB_USER") != null
+    ? System.getenv("DB_USER")
+    : "postgres";
+private static final String PASSWORD = System.getenv("DB_PASSWORD") != null
+    ? System.getenv("DB_PASSWORD")
+    : "Mp.1025889078";
+```
+
+| Parameter | Default value | Environment variable |
+|---|---|---|
+| JDBC URL | `jdbc:postgresql://localhost:5432/tienda_digital_textiles_db` | `DB_URL` |
+| Username | `postgres` | `DB_USER` |
+| Password | `Mp.1025889078` | `DB_PASSWORD` |
+| Port | `5432` | (part of `DB_URL`) |
+
+<Note>
+  The connection is a lazy singleton that automatically reconnects if the connection is found to be closed or invalid (uses `connection.isValid(3)` with a 3-second timeout to detect stale connections from PostgreSQL idle timeouts).
+</Note>
+
+## Tables
+
+### `users`
+
+All registered accounts. The `role` column uses Spanish values in the database but the frontend normalizes them to English (`cliente` → `client`, `vendedor` → `seller`, `administrador` → `admin`).
+
+| Column | Type | Nullable | Default | Notes |
+|---|---|---|---|---|
+| `id` | `SERIAL` | No | auto | Primary key |
+| `name` | `VARCHAR` | No | — | Full name |
+| `email` | `VARCHAR` | No | — | Unique login identifier |
+| `password_hash` | `VARCHAR(255)` | Yes | `NULL` | SHA-256 hex hash (added in RunMigration.java) |
+| `role` | `VARCHAR(50)` | No | `'cliente'` | `'cliente'`, `'vendedor'`, or `'administrador'` |
+| `active` | `BOOLEAN` | No | `TRUE` | Soft-delete / account enable flag |
+| `suspended` | `BOOLEAN` | No | `FALSE` | Admin can suspend without deactivating |
+| `suspension_reason` | `TEXT` | Yes | `NULL` | Reason text for suspension |
+| `commission_rate` | `NUMERIC(10,2)` | Yes | `0.00` | Seller commission percentage |
+| `registered_at` | `TIMESTAMP` | No | `CURRENT_TIMESTAMP` | Account creation time |
+| `last_login` | `TIMESTAMP` | Yes | `NULL` | Updated by `AuthDAO.updateLastLogin()` on each successful login |
+
+**Derived `status` field** (computed in `UserDAO`, not stored):
+- `'Suspendido'` — when `suspended = true`
+- `'Inactivo'` — when `active = false`
+- `'Activo'` — otherwise
+
+```sql
+-- Login query used by AuthDAO
+SELECT id, name, email, role, active, suspended, suspension_reason,
+       commission_rate, registered_at, last_login, password_hash
+FROM users
+WHERE email = ? AND active = true;
+```
+
+---
+
+### `products`
+
+Product catalogue. Images are stored separately in `product_images`. Products are soft-deleted (`active = false`) rather than physically removed.
+
+| Column | Type | Nullable | Default | Notes |
+|---|---|---|---|---|
+| `id` | `SERIAL` | No | auto | Primary key |
+| `name` | `VARCHAR` | No | — | Product display name |
+| `category_id` | `INT` | Yes | `NULL` | FK → `categories.id` |
+| `price` | `NUMERIC` / `DOUBLE` | No | — | Price in COP |
+| `seller_id` | `INT` | Yes | `NULL` | FK → `users.id` |
+| `description` | `TEXT` | Yes | `NULL` | Long product description |
+| `material` | `VARCHAR` | Yes | `NULL` | Fabric material |
+| `width` | `VARCHAR` | Yes | `NULL` | Fabric width (e.g. `'1.50m'`) |
+| `weight` | `VARCHAR` | Yes | `NULL` | Fabric weight (e.g. `'200 g/m²'`) |
+| `care` | `VARCHAR` | Yes | `NULL` | Care instructions |
+| `stock` | `INT` | No | `0` | Available units |
+| `featured` | `BOOLEAN` | No | `FALSE` | Shown in `FeaturedProducts` section |
+| `active` | `BOOLEAN` | No | `TRUE` | `false` = soft-deleted |
+| `moderation_status` | `VARCHAR(20)` | No | `'approved'` | `'pending'`, `'approved'`, or `'rejected'` (added in RunMigration3.java) |
+| `rejection_reason` | `TEXT` | Yes | `NULL` | Reason set when admin rejects a product |
+| `updated_at` | `TIMESTAMP` | Yes | — | Set to `NOW()` on every update |
+
+<Tip>
+  New products submitted by sellers are inserted with `moderation_status = 'pending'` and `active = true`. The admin approval queue at `/admin/moderacion/aprobacion` sets `moderation_status = 'approved'` or `'rejected'` and flips `active` accordingly.
+</Tip>
+
+---
+
+### `categories`
+
+Product categories. Products join this table to resolve `category_id` → category name.
+
+| Column | Type | Nullable | Notes |
+|---|---|---|---|
+| `id` | `SERIAL` | No | Primary key |
+| `name` | `VARCHAR` | No | e.g. `'Algodón'`, `'Lino'`, `'Seda'` |
+
+```sql
+-- Category join used in ProductDAO
+SELECT p.*, c.name AS category_name
+FROM products p
+LEFT JOIN categories c ON p.category_id = c.id
+WHERE p.active = true;
+```
+
+---
+
+### `product_images`
+
+Stores image URLs for products. A product can have multiple images ordered by `display_order`.
+
+| Column | Type | Nullable | Notes |
+|---|---|---|---|
+| `id` | `SERIAL` | No | Primary key |
+| `product_id` | `INT` | No | FK → `products.id` |
+| `image_url` | `VARCHAR` | No | URL path (`http://localhost:8081/uploads/product_N_timestamp.ext`) |
+| `display_order` | `INT` | No | `0` = primary image; ascending for additional images |
+
+Images are uploaded as Base64 via `PUT /api/products/:id/image`. The Java backend decodes them, writes the file to the `uploads/` directory, then replaces the row in `product_images`.
+
+---
+
+### `orders`
+
+Customer orders. Line items are in `order_items`.
+
+| Column | Type | Nullable | Default | Notes |
+|---|---|---|---|---|
+| `id` | `SERIAL` | No | auto | Primary key |
+| `client_id` | `INT` | Yes | `NULL` | FK → `users.id` (the buyer) |
+| `seller_id` | `INT` | Yes | `NULL` | FK → `users.id` (the assigned seller) |
+| `total` | `NUMERIC` / `DOUBLE` | No | — | Order total in COP |
+| `status` | `VARCHAR` | No | — | e.g. `'pending'`, `'processing'`, `'shipped'`, `'delivered'`, `'cancelled'` |
+| `order_date` | `TIMESTAMP` | No | `CURRENT_TIMESTAMP` | When the order was placed |
+| `updated_at` | `TIMESTAMP` | Yes | — | Set to `NOW()` on status change |
+
+---
+
+### `order_items`
+
+Line items for each order.
+
+| Column | Type | Nullable | Notes |
+|---|---|---|---|
+| `id` | `SERIAL` | No | Primary key |
+| `order_id` | `INT` | No | FK → `orders.id` |
+| `product_id` | `INT` | No | FK → `products.id` |
+| `quantity` | `INT` | No | Number of units ordered |
+
+```sql
+-- Full order query used by OrderDAO
+SELECT o.id, o.client_id, o.seller_id, o.total, o.status, o.order_date,
+       oi.product_id, oi.quantity
+FROM orders o
+LEFT JOIN order_items oi ON o.id = oi.order_id
+ORDER BY o.id ASC;
+```
+
+---
+
+### `coupons`
+
+Discount coupons created by admins. Created in `RunMigration2.java`.
+
+| Column | Type | Nullable | Default | Notes |
+|---|---|---|---|---|
+| `id` | `SERIAL` | No | auto | Primary key |
+| `code` | `VARCHAR(50)` | No | — | Unique coupon code (e.g. `'DESCUENTO10'`) |
+| `discount_type` | `VARCHAR(20)` | No | — | `'percentage'` or `'fixed'` |
+| `discount_value` | `NUMERIC(10,2)` | No | — | Amount or percentage to discount |
+| `expires_at` | `TIMESTAMP` | Yes | `NULL` | Expiry datetime |
+| `min_purchase` | `NUMERIC(10,2)` | Yes | `NULL` | Minimum cart total required |
+| `max_uses` | `INT` | Yes | `NULL` | Maximum number of redemptions; `NULL` = unlimited |
+| `first_time_only` | `BOOLEAN` | No | `FALSE` | Restricts to buyers with zero previous orders |
+| `usage_count` | `INT` | No | `0` | Incremented on each redemption |
+| `active` | `BOOLEAN` | No | `TRUE` | Deactivated by admin or when `max_uses` is reached |
+
+Validation is performed client-side in `MetricsContext.validateCoupon()` before applying.
+
+---
+
+### `support_tickets`
+
+Support requests submitted by clients. Created in `RunMigration3.java`.
+
+| Column | Type | Nullable | Default | Notes |
+|---|---|---|---|---|
+| `id` | `SERIAL` | No | auto | Primary key |
+| `user_id` | `INT` | Yes | `NULL` | FK → `users.id` (submitting client) |
+| `user_name` | `VARCHAR(100)` | Yes | `NULL` | Denormalized for display |
+| `user_email` | `VARCHAR(100)` | Yes | `NULL` | Denormalized for display |
+| `subject` | `VARCHAR(200)` | Yes | `NULL` | Short subject line |
+| `description` | `TEXT` | Yes | `NULL` | Full ticket description |
+| `status` | `VARCHAR(20)` | Yes | `'open'` | `'open'`, `'in_progress'`, `'resolved'` |
+| `priority` | `VARCHAR(20)` | Yes | `NULL` | `'low'`, `'medium'`, `'high'` |
+| `assigned_to` | `INT` | Yes | `NULL` | FK → `users.id` (admin handling the ticket) |
+| `created_at` | `TIMESTAMP` | No | `CURRENT_TIMESTAMP` | Creation time |
+| `updated_at` | `TIMESTAMP` | No | `CURRENT_TIMESTAMP` | Last update time |
+| `resolved_at` | `TIMESTAMP` | Yes | `NULL` | Set when `status` becomes `'resolved'` |
+
+---
+
+### `bug_reports`
+
+Technical bug reports submitted via the public `/reportar-fallo` page. Created in `RunMigration3.java`.
+
+| Column | Type | Nullable | Default | Notes |
+|---|---|---|---|---|
+| `id` | `SERIAL` | No | auto | Primary key |
+| `seller_id` | `INT` | Yes | `NULL` | FK → `users.id` (reporter; can be `NULL` for anonymous) |
+| `seller_name` | `VARCHAR(100)` | Yes | `NULL` | Denormalized reporter name |
+| `area` | `VARCHAR(100)` | Yes | `NULL` | Affected area of the app (e.g. `'Catálogo'`, `'Pago'`) |
+| `description` | `TEXT` | Yes | `NULL` | Description of the bug |
+| `steps` | `TEXT` | Yes | `NULL` | Steps to reproduce |
+| `status` | `VARCHAR(20)` | Yes | `'new'` | `'new'`, `'investigating'`, `'resolved'` |
+| `priority` | `VARCHAR(20)` | Yes | `NULL` | `'low'`, `'medium'`, `'high'` |
+| `assigned_to` | `INT` | Yes | `NULL` | FK → `users.id` (admin handling the bug) |
+| `reported_at` | `TIMESTAMP` | No | `CURRENT_TIMESTAMP` | Submission time |
+| `resolved_at` | `TIMESTAMP` | Yes | `NULL` | Set when `status` becomes `'resolved'` |
+
+---
+
+### `system_config`
+
+General-purpose key–value configuration store used by admins and for persisting metrics. Created in `RunMigration2.java`.
+
+| Column | Type | Nullable | Notes |
+|---|---|---|---|
+| `config_key` | `VARCHAR(100)` | No | Primary key |
+| `config_value` | `TEXT` | Yes | JSON-serialized value |
+
+**Keys used by the application:**
+
+| Key | Value type | Used by |
+|---|---|---|
+| `'system_config'` | JSON object | `SystemConfig` admin page |
+| `'metrics_sales'` | JSON array | Sales chart data |
+| `'inventory_batches'` | JSON array | `BatchControl` admin page |
+| `'waste_events'` | JSON array | `WasteCalculator` admin page |
+| `'stock_thresholds'` | JSON array | `StockSettings` admin page |
+
+---
+
+## Entity relationships
+
+```
+users (id)
+  ├── products.seller_id
+  ├── orders.client_id
+  ├── orders.seller_id
+  ├── support_tickets.user_id
+  ├── support_tickets.assigned_to
+  ├── bug_reports.seller_id
+  └── bug_reports.assigned_to
+
+products (id)
+  ├── product_images.product_id
+  ├── order_items.product_id
+  └── categories.id ← products.category_id
+
+orders (id)
+  └── order_items.order_id
+```
+
+## Running migrations
+
+Migration scripts are standalone Java files in `backend-java/conexionPostgres/`. Run them after compiling:
+
+```bash
+cd backend-java/conexionPostgres
+
+# Compile a migration script
+javac -cp "lib/postgresql-42.7.3.jar" RunMigration3.java -d bin
+
+# Run it
+java -cp "bin;lib/postgresql-42.7.3.jar" RunMigration3
+```
+
+| Script | What it does |
+|---|---|
+| `RunMigration.java` | Adds `password_hash` column to `users` |
+| `RunMigration2.java` | Creates `coupons` and `system_config` tables |
+| `RunMigration3.java` | Creates `support_tickets` and `bug_reports` tables; adds `moderation_status` and `rejection_reason` to `products` |
+| `FixUsersTable.java` | Idempotent — adds all user management columns (`role`, `active`, `suspended`, `suspension_reason`, `commission_rate`, `registered_at`, `last_login`, `password_hash`) if they do not exist |

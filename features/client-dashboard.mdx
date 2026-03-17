@@ -1,0 +1,184 @@
+---
+title: Client dashboard
+description: All pages available to authenticated clients — orders, wishlist, project calculator, support tickets, and account settings.
+---
+
+The client dashboard is accessible at `/cliente` and requires the `client` role. All routes under `/cliente/*` are wrapped in `<ProtectedRoute roles="client">` in `App.jsx`.
+
+## Dashboard overview
+
+`ClientDashboard.jsx` is the entry point at `/cliente`. It displays:
+
+- A welcome banner with a link to the product catalog.
+- Four stat cards: total orders, orders in transit, wishlist count, and total spent (COP).
+- A quick-action grid linking to the four main sections.
+- A recent orders table (last 3 orders) with live status badges.
+- A "Mi Cuenta" sidebar with links to profile settings and address book.
+
+Order statuses shown on the dashboard are derived from `getOrdersByClient(user.id)` from `MetricsContext`.
+
+## Routes reference
+
+| Path | Component | Description |
+|---|---|---|
+| `/cliente` | `ClientDashboard` | Main dashboard overview |
+| `/cliente/pedidos` | `OrderHistory` | Full order history table |
+| `/cliente/pedidos/rastreo` | `OrderTracking` | Shipment tracking by order ID or guía |
+| `/cliente/coleccion` | `Wishlist` | Wishlist / virtual sample book |
+| `/cliente/coleccion/calculadora` | `ProjectCalculator` | Fabric yardage calculator |
+| `/cliente/soporte/nuevo` | `NewReport` | Submit a new support ticket |
+| `/cliente/soporte/tickets` | `MyTickets` | View and reply to support tickets |
+| `/cliente/configuracion` | `Profile` (Settings) | Edit profile, password, notifications |
+| `/cliente/configuracion/direcciones` | `AddressBook` | Manage shipping addresses |
+
+## Orders
+
+### Order history — `/cliente/pedidos`
+
+`OrderHistory.jsx` displays all past orders in a table with columns for order ID, date, status, and total. Each row has a details button that opens an `OrderDetailsModal`.
+
+From the modal, clients can:
+
+- Cancel an order (sets status to `Cancelado`).
+- Request a refund.
+- Report a problem (links to the support flow).
+
+Status badges and their colors:
+
+| Status | Color |
+|---|---|
+| Entregado | Green |
+| Enviado | Orange |
+| En Proceso | Blue |
+| Pendiente | Yellow |
+| Cancelado | Red |
+
+### Order tracking — `/cliente/pedidos/rastreo`
+
+`OrderTracking.jsx` accepts an order ID via the `?id=` query parameter (populated automatically when clicking an order from the dashboard) or via manual text input.
+
+The component searches `MetricsContext.orders` by `id` or `trackingNumber`. If found, it renders a 5-step progress bar:
+
+```text
+Pago Recibido → En Corte → Empacado → Enviado → Entregado
+```
+
+The active step is determined by mapping `order.status` to its index in the status array `['pending', 'paid', 'cutting', 'packed', 'shipped', 'delivered']`. Steps before the current index are marked completed (green), the current step is highlighted (primary color with ring), and future steps are greyed out.
+
+For delivered orders, a prompt links to `/cliente/soporte/nuevo?orderId={id}` to report a problem.
+
+<Tip>
+  Tracking also shows the courier name (`order.courierName`, defaults to "Servientrega") and the tracking number (`order.trackingNumber`) when available.
+</Tip>
+
+## Wishlist (collection) — `/cliente/coleccion`
+
+`Wishlist.jsx` is a virtual sample book. Clients organize saved fabrics into named categories (e.g., Cortinas, Vestidos, Muebles).
+
+**Features:**
+
+- Filter by category using tab pills.
+- Create new categories via a modal.
+- Each card shows the fabric image, name, category, price/m, and save date.
+- Per-item notes that can be added or edited inline.
+- Stock-out badge with an optional "notify when available" toggle.
+- "Agregar al Carrito" button for in-stock items.
+- Remove item button (visible on hover).
+
+## Project calculator — `/cliente/coleccion/calculadora`
+
+`ProjectCalculator.jsx` calculates how many meters of fabric a project requires.
+
+**Supported project types:**
+
+| Key | Name | Inputs |
+|---|---|---|
+| `skirt_circular` | Falda Circular | Cintura, Largo |
+| `skirt_straight` | Falda Recta | Cintura, Cadera, Largo |
+| `curtains` | Cortinas | Ancho ventana, Alto ventana, Tipo fruncido |
+| `tablecloth` | Mantel | Largo mesa, Ancho mesa, Caída |
+| `cushion` | Cojines | Tamaño cojín, Cantidad |
+| `dress_simple` | Vestido Sencillo | Contorno busto, Largo vestido |
+
+**Fabric widths available:** 1.10 m, 1.40 m, 1.50 m, 2.80 m, 3.00 m.
+
+The result panel shows three values:
+
+1. **Cálculo exacto** — raw computed meters.
+2. **Recomendado** — exact value rounded up to the nearest 0.1 m, plus a 10% safety margin.
+3. **Costo estimado** — recommended meters × the user-supplied price per meter.
+
+An "Agregar al carrito" button adds the recommended quantity directly.
+
+## Support tickets
+
+### New report — `/cliente/soporte/nuevo`
+
+`NewReport.jsx` lets clients report a problem with a delivered order.
+
+<Steps>
+  <Step title="Select the order">
+    A dropdown is populated with orders where `status === 'delivered'`. The `?orderId=` query parameter pre-selects an order if provided.
+  </Step>
+  <Step title="Choose issue type">
+    Eight issue types are available, each with a priority level:
+
+    | Issue | Priority |
+    |---|---|
+    | Manchas en la tela | Alta |
+    | Color incorrecto | Alta |
+    | Metraje incorrecto | Alta |
+    | Tela dañada en transporte | Alta |
+    | Tela equivocada | Alta |
+    | Hilos sueltos | Normal |
+    | Calidad diferente a la esperada | Normal |
+    | Otro problema | Bajo |
+  </Step>
+  <Step title="Describe and attach photos">
+    A text area (500-character limit) and an optional image uploader (max 5 photos).
+  </Step>
+  <Step title="Submit">
+    The form posts the ticket and redirects to `/cliente/soporte/tickets`.
+  </Step>
+</Steps>
+
+<Note>
+  Only orders with `status === 'delivered'` appear in the order selector. Reports on non-delivered orders are not supported.
+</Note>
+
+### My tickets — `/cliente/soporte/tickets`
+
+`MyTickets.jsx` lists all support tickets for the current client. Each ticket is an expandable card.
+
+**Ticket statuses:**
+
+| Status | Label | Description |
+|---|---|---|
+| `open` | Abierto | Report received, not yet reviewed |
+| `in_progress` | En Revisión | Seller is reviewing the case |
+| `resolved` | Resuelto | Case closed with a resolution |
+| `closed` | Cerrado | Case closed |
+
+Expanded view shows the original description, a threaded conversation (messages from `client`, `seller`, or `admin`), the resolution details (if resolved), and a reply input for open/in-progress tickets.
+
+## Account settings
+
+### Profile — `/cliente/configuracion`
+
+`Settings/Profile.jsx` provides a single form to manage:
+
+- **Personal info** — name, email (read-only), phone.
+- **Security** — password change (requires current password; new password minimum 8 characters).
+- **Notification preferences** — four toggles: new collections, offers/discounts, order updates, newsletter.
+
+### Address book — `/cliente/configuracion/direcciones`
+
+`AddressBook.jsx` manages shipping addresses for Colombia.
+
+Each address has:
+
+- **Type label** — Casa, Taller, Oficina, or Otro (with matching icon).
+- **Recipient name, phone, department** (full list of 33 Colombian departments), **city, neighborhood, street address, additional info**.
+- A **default address** toggle (highlighted with a primary-color ring).
+
+Actions per address: edit, set as default, delete (delete is disabled on the default address).

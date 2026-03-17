@@ -1,0 +1,92 @@
+{
+  "projectType": "saas",
+  "projectName": "D&D Textil - Tienda Digital",
+  "projectDescription": "A full-stack digital textile store with multi-role dashboards (admin, seller, client), product catalog, shopping cart, checkout, payment processing, and analytics.",
+  "theme": "almond",
+  "primaryColor": "#f97316",
+  "lightColor": "#fff7ed",
+  "darkColor": "#7c2d12",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Getting Started",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": ["introduction", "quickstart"]
+          },
+          {
+            "group": "Setup",
+            "pages": ["setup/installation", "setup/database", "setup/environment"]
+          }
+        ]
+      },
+      {
+        "tab": "Features",
+        "groups": [
+          {
+            "group": "Store",
+            "pages": ["features/catalog", "features/product-detail", "features/cart", "features/checkout", "features/payment"]
+          },
+          {
+            "group": "User Roles",
+            "pages": ["features/authentication", "features/client-dashboard", "features/seller-dashboard", "features/admin-dashboard"]
+          },
+          {
+            "group": "Admin Tools",
+            "pages": ["features/inventory-management", "features/analytics", "features/vendor-moderation", "features/support-tickets"]
+          }
+        ]
+      },
+      {
+        "tab": "Reference",
+        "groups": [
+          {
+            "group": "Architecture",
+            "pages": ["reference/project-structure", "reference/routing", "reference/state-management"]
+          },
+          {
+            "group": "Database",
+            "pages": ["reference/database-schema"]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Multi-role authentication (admin, seller, client) with route protection",
+    "Product catalog with filters, sorting, and category browsing",
+    "Shopping cart with localStorage persistence and quantity management",
+    "Checkout flow with form validation using React Hook Form and Zod",
+    "Payment processing with card and PSE (Colombian bank transfer) options",
+    "Client dashboard with order history, wishlist, project calculator, and support tickets",
+    "Seller dashboard with product management, orders, and stock alerts",
+    "Admin dashboard with user management, inventory control, vendor moderation, and analytics",
+    "Sales analytics with heat maps, rotation ranking, returns analysis, and revenue projection",
+    "Dark mode support with Tailwind CSS theming",
+    "Animated UI with Framer Motion page transitions",
+    "PostgreSQL database with Java backend connection"
+  ],
+  "publicApiSurface": [
+    "GET / - Home page",
+    "GET /catalogo - Product catalog with filters",
+    "GET /producto/:id - Product detail page",
+    "GET /carrito - Shopping cart",
+    "POST /checkout - Checkout process (protected)",
+    "POST /pago - Payment processing (protected)",
+    "POST /login - User authentication",
+    "POST /registro - User registration",
+    "GET /cliente - Client dashboard (role: client)",
+    "GET /cliente/pedidos - Order history (role: client)",
+    "GET /cliente/coleccion - Wishlist (role: client)",
+    "GET /cliente/coleccion/calculadora - Project calculator (role: client)",
+    "GET /vendedor - Seller dashboard (role: seller/admin)",
+    "GET /vendedor/pedidos - Seller orders (role: seller/admin)",
+    "GET /vendedor/stock - Stock alerts (role: seller/admin)",
+    "GET /admin - Admin overview (role: admin)",
+    "GET /admin/usuarios - User management (role: admin)",
+    "GET /admin/inventario/lotes - Batch control (role: admin)",
+    "GET /admin/analytics/mapa-ventas - Sales heat map (role: admin)",
+    "GET /admin/soporte/tickets - Ticket management (role: admin)"
+  ]
+}
